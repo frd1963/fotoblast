@@ -145,6 +145,19 @@ app.get('/receiver', (_req, res) => {
   res.type('html').send(RECEIVER_HTML);
 });
 
+app.get('/slideshow', (_req, res) => {
+  res.type('html').send(SLIDESHOW_HTML);
+});
+
+app.get('/slideshow/photos', (_req, res) => {
+  res.json({
+    photos: listPhotos().map((filename) => ({
+      filename,
+      url: `/photos/${encodeURIComponent(filename)}`,
+    })),
+  });
+});
+
 app.get('/sync', (req, res) => {
   const synced = parseSyncedCookie(req);
   const all = listPhotos();
@@ -250,17 +263,34 @@ const UI_HTML = `<!DOCTYPE html>
     }
     #status.ok { color: #047857; }
     #status.err { color: #b91c1c; }
-    #previewWrap {
-      display: none;
-      margin-top: 0.75rem;
+    #clearBtn {
+      background: #e5e7eb;
+      color: #111;
+      margin-bottom: 0.75rem;
+    }
+    #clearBtn:disabled { opacity: 0.45; cursor: default; }
+    #stackCard { display: none; }
+    #stackCard.visible { display: block; }
+    #photoStack {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .stack-item {
       border-radius: 8px;
       overflow: hidden;
+      background: #f3f4f6;
     }
-    #previewWrap.visible { display: block; }
-    #preview {
+    .stack-item img {
       width: 100%;
       display: block;
-      border-radius: 8px;
+      vertical-align: middle;
+    }
+    .stack-item .stack-label {
+      font-size: 0.75rem;
+      color: #6b7280;
+      padding: 0.35rem 0.5rem 0.45rem;
+      word-break: break-all;
     }
     input[type="file"] { display: none; }
     code { font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 4px; }
@@ -277,21 +307,54 @@ const UI_HTML = `<!DOCTYPE html>
   <div class="card">
     <button type="button" id="takeBtn">Take fotos</button>
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
-    <div id="previewWrap">
-      <img id="preview" alt="Last capture preview" draggable="false">
-    </div>
     <p id="status"></p>
   </div>
+  <div class="card" id="stackCard">
+    <button type="button" id="clearBtn" disabled>Clear</button>
+    <div id="photoStack"></div>
+  </div>
   <script>
+    const MAX_STACK = 25;
     const takeBtn = document.getElementById('takeBtn');
     const input = document.getElementById('cameraInput');
     const status = document.getElementById('status');
-    const preview = document.getElementById('preview');
-    const previewWrap = document.getElementById('previewWrap');
+    const stackCard = document.getElementById('stackCard');
+    const photoStack = document.getElementById('photoStack');
+    const clearBtn = document.getElementById('clearBtn');
 
     function setStatus(msg, type) {
       status.textContent = msg;
       status.className = type || '';
+    }
+
+    function updateStackChrome() {
+      const hasPhotos = photoStack.children.length > 0;
+      stackCard.classList.toggle('visible', hasPhotos);
+      clearBtn.disabled = !hasPhotos;
+    }
+
+    function addToStack(result) {
+      const item = document.createElement('div');
+      item.className = 'stack-item';
+      const img = document.createElement('img');
+      img.src = result.url;
+      img.alt = result.filename;
+      img.loading = 'lazy';
+      const label = document.createElement('div');
+      label.className = 'stack-label';
+      label.textContent = result.filename;
+      item.appendChild(img);
+      item.appendChild(label);
+      photoStack.prepend(item);
+      while (photoStack.children.length > MAX_STACK) {
+        photoStack.lastElementChild.remove();
+      }
+      updateStackChrome();
+    }
+
+    function clearStack() {
+      photoStack.innerHTML = '';
+      updateStackChrome();
     }
 
     function ensureImageFile(file) {
@@ -313,15 +376,10 @@ const UI_HTML = `<!DOCTYPE html>
       const imageFile = ensureImageFile(file);
       takeBtn.disabled = true;
       setStatus('Uploading…');
-      previewWrap.classList.remove('visible');
 
       try {
-        const previewUrl = URL.createObjectURL(imageFile);
-        preview.src = previewUrl;
-        preview.onload = () => URL.revokeObjectURL(previewUrl);
-
         const result = await uploadFile(imageFile);
-        previewWrap.classList.add('visible');
+        addToStack(result);
         setStatus('Uploaded: ' + result.filename, 'ok');
       } catch (e) {
         setStatus(e.message || 'Upload failed', 'err');
@@ -338,6 +396,7 @@ const UI_HTML = `<!DOCTYPE html>
     });
 
     takeBtn.addEventListener('click', () => input.click());
+    clearBtn.addEventListener('click', clearStack);
   </script>
 </body>
 </html>`;
@@ -646,6 +705,396 @@ const RECEIVER_HTML = `<!DOCTYPE html>
     pickFolderBtn.addEventListener('click', chooseSaveFolder);
     clearFolderBtn.addEventListener('click', clearSaveFolder);
     loadSavedFolder();
+  </script>
+</body>
+</html>`;
+
+const SLIDESHOW_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fotoblast Slideshow</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    #stage {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      overflow: hidden;
+    }
+    .layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transform-origin: center center;
+      transition-duration: 0s;
+      transition-property: opacity, transform, filter, clip-path;
+      transition-timing-function: ease-in-out;
+      z-index: 1;
+    }
+    .layer.off {
+      visibility: hidden;
+      opacity: 0 !important;
+      pointer-events: none;
+      z-index: 0;
+      transition: none !important;
+    }
+    .layer.from { z-index: 1; visibility: visible; }
+    .layer.to { z-index: 2; visibility: visible; }
+    #empty {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+      font-size: 1.1rem;
+      padding: 2rem;
+      text-align: center;
+    }
+    #empty.visible { display: flex; }
+    #menu {
+      position: fixed;
+      right: 1rem;
+      bottom: 1rem;
+      z-index: 20;
+      width: min(20rem, calc(100vw - 2rem));
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(0.5rem);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    #menu.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    #menu h2 {
+      margin: 0 0 0.65rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .field {
+      margin-bottom: 0.65rem;
+    }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 0.8rem;
+      margin-bottom: 0.25rem;
+      color: #cbd5e1;
+    }
+    .field label span { color: #f8fafc; font-weight: 600; }
+    .field input[type="range"] { width: 100%; }
+    .field select {
+      width: 100%;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #f8fafc;
+      font-size: 0.85rem;
+    }
+    .layer.from.fade { opacity: 1; }
+    .layer.from.fade.animate { opacity: 0; }
+    .layer.to.fade { opacity: 0; }
+    .layer.to.fade.animate { opacity: 1; }
+    .layer.from.slide-left { opacity: 1; transform: translateX(0); }
+    .layer.from.slide-left.animate { opacity: 0; transform: translateX(-100%); }
+    .layer.to.slide-left { opacity: 0; transform: translateX(100%); }
+    .layer.to.slide-left.animate { opacity: 1; transform: translateX(0); }
+    .layer.from.slide-right { opacity: 1; transform: translateX(0); }
+    .layer.from.slide-right.animate { opacity: 0; transform: translateX(100%); }
+    .layer.to.slide-right { opacity: 0; transform: translateX(-100%); }
+    .layer.to.slide-right.animate { opacity: 1; transform: translateX(0); }
+    .layer.from.slide-up { opacity: 1; transform: translateY(0); }
+    .layer.from.slide-up.animate { opacity: 0; transform: translateY(-100%); }
+    .layer.to.slide-up { opacity: 0; transform: translateY(100%); }
+    .layer.to.slide-up.animate { opacity: 1; transform: translateY(0); }
+    .layer.from.slide-down { opacity: 1; transform: translateY(0); }
+    .layer.from.slide-down.animate { opacity: 0; transform: translateY(100%); }
+    .layer.to.slide-down { opacity: 0; transform: translateY(-100%); }
+    .layer.to.slide-down.animate { opacity: 1; transform: translateY(0); }
+    .layer.from.zoom-in { opacity: 1; transform: scale(1); }
+    .layer.from.zoom-in.animate { opacity: 0; transform: scale(1.15); }
+    .layer.to.zoom-in { opacity: 0; transform: scale(0.85); }
+    .layer.to.zoom-in.animate { opacity: 1; transform: scale(1); }
+    .layer.from.zoom-out { opacity: 1; transform: scale(1); }
+    .layer.from.zoom-out.animate { opacity: 0; transform: scale(0.85); }
+    .layer.to.zoom-out { opacity: 0; transform: scale(1.15); }
+    .layer.to.zoom-out.animate { opacity: 1; transform: scale(1); }
+    .layer.from.blur { opacity: 1; filter: blur(0); }
+    .layer.from.blur.animate { opacity: 0; filter: blur(12px); }
+    .layer.to.blur { opacity: 0; filter: blur(12px); }
+    .layer.to.blur.animate { opacity: 1; filter: blur(0); }
+    .layer.from.rotate { opacity: 1; transform: rotate(0deg) scale(1); }
+    .layer.from.rotate.animate { opacity: 0; transform: rotate(-12deg) scale(0.9); }
+    .layer.to.rotate { opacity: 0; transform: rotate(12deg) scale(0.9); }
+    .layer.to.rotate.animate { opacity: 1; transform: rotate(0deg) scale(1); }
+    .layer.from.flip-h { opacity: 1; transform: perspective(1200px) rotateY(0deg); }
+    .layer.from.flip-h.animate { opacity: 0; transform: perspective(1200px) rotateY(90deg); }
+    .layer.to.flip-h { opacity: 0; transform: perspective(1200px) rotateY(-90deg); }
+    .layer.to.flip-h.animate { opacity: 1; transform: perspective(1200px) rotateY(0deg); }
+    .layer.from.flip-v { opacity: 1; transform: perspective(1200px) rotateX(0deg); }
+    .layer.from.flip-v.animate { opacity: 0; transform: perspective(1200px) rotateX(90deg); }
+    .layer.to.flip-v { opacity: 0; transform: perspective(1200px) rotateX(-90deg); }
+    .layer.to.flip-v.animate { opacity: 1; transform: perspective(1200px) rotateX(0deg); }
+    .layer.from.wipe-left { opacity: 1; clip-path: inset(0 0 0 0); }
+    .layer.from.wipe-left.animate { clip-path: inset(0 100% 0 0); opacity: 1; }
+    .layer.to.wipe-left { opacity: 1; clip-path: inset(0 0 0 100%); }
+    .layer.to.wipe-left.animate { clip-path: inset(0 0 0 0); }
+    .layer.from.dissolve { opacity: 1; filter: contrast(1); }
+    .layer.from.dissolve.animate { opacity: 0; filter: contrast(2) brightness(1.4); }
+    .layer.to.dissolve { opacity: 0; filter: contrast(0.5) brightness(0.6); }
+    .layer.to.dissolve.animate { opacity: 1; filter: contrast(1) brightness(1); }
+    .layer.from.push { opacity: 1; transform: scale(1); }
+    .layer.from.push.animate { opacity: 0.6; transform: scale(0.92); }
+    .layer.to.push { opacity: 0; transform: scale(1.08); }
+    .layer.to.push.animate { opacity: 1; transform: scale(1); }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <img id="layerA" class="layer" alt="" decoding="async">
+    <img id="layerB" class="layer off" alt="" decoding="async">
+  </div>
+  <p id="empty">No photos uploaded yet.</p>
+  <div id="menu" aria-label="Slideshow options">
+    <h2>Slideshow</h2>
+    <div class="field">
+      <label for="displayTime">Show each photo <span id="displayTimeVal">5s</span></label>
+      <input type="range" id="displayTime" min="1" max="30" step="1" value="5">
+    </div>
+    <div class="field">
+      <label for="transitionSpeed">Transition speed <span id="transitionSpeedVal">0.8s</span></label>
+      <input type="range" id="transitionSpeed" min="0.1" max="3" step="0.1" value="0.8">
+    </div>
+    <div class="field">
+      <label for="transitionType">Transition type</label>
+      <select id="transitionType">
+        <option value="fade">Fade</option>
+        <option value="slide-left">Slide left</option>
+        <option value="slide-right">Slide right</option>
+        <option value="slide-up">Slide up</option>
+        <option value="slide-down">Slide down</option>
+        <option value="zoom-in">Zoom in</option>
+        <option value="zoom-out">Zoom out</option>
+        <option value="blur">Blur</option>
+        <option value="rotate">Rotate</option>
+        <option value="flip-h">Flip horizontal</option>
+        <option value="flip-v">Flip vertical</option>
+        <option value="wipe-left">Wipe left</option>
+        <option value="dissolve">Dissolve</option>
+        <option value="push">Push</option>
+      </select>
+    </div>
+  </div>
+  <script>
+    const layerA = document.getElementById('layerA');
+    const layerB = document.getElementById('layerB');
+    const emptyEl = document.getElementById('empty');
+    const menu = document.getElementById('menu');
+    const displayTimeInput = document.getElementById('displayTime');
+    const transitionSpeedInput = document.getElementById('transitionSpeed');
+    const transitionTypeSelect = document.getElementById('transitionType');
+    const displayTimeVal = document.getElementById('displayTimeVal');
+    const transitionSpeedVal = document.getElementById('transitionSpeedVal');
+
+    let photos = [];
+    let index = 0;
+    let active = layerA;
+    let idle = layerB;
+    let holdTimer = null;
+    let transitionTimer = null;
+    let menuHideTimer = null;
+    let running = false;
+    let transitioning = false;
+
+    function getDisplayMs() {
+      return Number(displayTimeInput.value) * 1000;
+    }
+
+    function getTransitionMs() {
+      return Math.round(Number(transitionSpeedInput.value) * 1000);
+    }
+
+    function getTransitionType() {
+      return transitionTypeSelect.value;
+    }
+
+    function updateLabels() {
+      displayTimeVal.textContent = displayTimeInput.value + 's';
+      transitionSpeedVal.textContent = Number(transitionSpeedInput.value).toFixed(1) + 's';
+    }
+
+    function clearTimers() {
+      clearTimeout(holdTimer);
+      clearTimeout(transitionTimer);
+      holdTimer = null;
+      transitionTimer = null;
+    }
+
+    function resetLayer(el, off) {
+      el.className = off ? 'layer off' : 'layer';
+      el.style.transitionDuration = '';
+    }
+
+    function waitMs(ms) {
+      return new Promise((resolve) => {
+        transitionTimer = setTimeout(resolve, ms + 50);
+      });
+    }
+
+    function showMenu() {
+      menu.classList.add('visible');
+      clearTimeout(menuHideTimer);
+      menuHideTimer = setTimeout(() => menu.classList.remove('visible'), 5000);
+    }
+
+    function scheduleMenuHide() {
+      showMenu();
+    }
+
+    function setPhotoList(list) {
+      photos = [...list].sort((a, b) => a.filename.localeCompare(b.filename));
+      if (!photos.length) {
+        running = false;
+        clearTimers();
+        emptyEl.classList.add('visible');
+        layerA.removeAttribute('src');
+        layerB.removeAttribute('src');
+        resetLayer(layerA, true);
+        resetLayer(layerB, true);
+        return;
+      }
+      emptyEl.classList.remove('visible');
+      if (index >= photos.length) index = 0;
+      if (!running) {
+        running = true;
+        active.src = photos[index].url;
+        active.alt = photos[index].filename;
+        resetLayer(active, false);
+        resetLayer(idle, true);
+      }
+      if (photos.length >= 2) scheduleHold();
+    }
+
+    function preload(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = reject;
+        img.src = url;
+      });
+    }
+
+    function scheduleHold() {
+      clearTimeout(holdTimer);
+      if (photos.length < 2) return;
+      holdTimer = setTimeout(advanceSlide, getDisplayMs());
+    }
+
+    async function advanceSlide() {
+      if (transitioning || photos.length < 2) return;
+      transitioning = true;
+      clearTimeout(holdTimer);
+      holdTimer = null;
+
+      const nextIndex = (index + 1) % photos.length;
+      const next = photos[nextIndex];
+      const type = getTransitionType();
+      const duration = getTransitionMs();
+
+      try {
+        try {
+          await preload(next.url);
+        } catch (_) {
+          scheduleHold();
+          return;
+        }
+
+        const out = active;
+        const inn = idle;
+
+        inn.src = next.url;
+        inn.alt = next.filename;
+        out.className = 'layer from ' + type;
+        inn.className = 'layer to ' + type;
+        out.style.transitionDuration = duration + 'ms';
+        inn.style.transitionDuration = duration + 'ms';
+
+        void out.offsetWidth;
+        out.classList.add('animate');
+        inn.classList.add('animate');
+
+        await waitMs(duration);
+
+        resetLayer(out, true);
+        resetLayer(inn, false);
+        active = inn;
+        idle = out;
+        index = nextIndex;
+        scheduleHold();
+      } finally {
+        transitioning = false;
+      }
+    }
+
+    function applySettings() {
+      updateLabels();
+      if (!photos.length) return;
+      transitioning = false;
+      clearTimers();
+      active = layerA;
+      idle = layerB;
+      active.src = photos[index].url;
+      active.alt = photos[index].filename;
+      resetLayer(active, false);
+      resetLayer(idle, true);
+      idle.removeAttribute('src');
+      if (photos.length >= 2) scheduleHold();
+    }
+
+    async function loadPhotos() {
+      const res = await fetch('/slideshow/photos');
+      const data = await res.json();
+      setPhotoList(data.photos || []);
+    }
+
+    displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
+    transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
+    transitionTypeSelect.addEventListener('change', () => { scheduleMenuHide(); applySettings(); });
+    menu.addEventListener('input', scheduleMenuHide);
+    menu.addEventListener('click', scheduleMenuHide);
+    menu.addEventListener('focusin', scheduleMenuHide);
+    document.addEventListener('mousemove', scheduleMenuHide);
+
+    const watch = new EventSource('/watch?initial=0');
+    watch.addEventListener('photo', () => { void loadPhotos(); });
+
+    updateLabels();
+    void loadPhotos();
   </script>
 </body>
 </html>`;
