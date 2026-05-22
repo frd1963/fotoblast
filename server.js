@@ -8,6 +8,12 @@ const crypto = require('crypto');
 const PORT = Number(process.env.PORT) || 3000;
 const REPO_DIR = process.env.REPO_DIR || path.join(__dirname, 'repo');
 const ICONS_DIR = path.join(__dirname, 'icons');
+let QRCodeLib;
+try {
+  QRCodeLib = require('qrcode');
+} catch {
+  QRCodeLib = null;
+}
 const SYNC_COOKIE = 'synced_photos';
 const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -140,6 +146,50 @@ function syncedCookieValue(names) {
   return `${SYNC_COOKIE}=${encodeURIComponent(JSON.stringify([...names]))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(COOKIE_MAX_AGE_MS / 1000)}`;
 }
 
+function slideshowDefaultPort(proto) {
+  const p = String(proto || '').toLowerCase().replace(/:$/, '');
+  return p === 'https' ? '443' : '80';
+}
+
+function hostWithPort(hostname, port, proto) {
+  if (!hostname) return '';
+  const p = String(port || '').trim();
+  if (!p || p === slideshowDefaultPort(proto)) return hostname;
+  if (hostname.includes(':')) return hostname;
+  return `${hostname}:${p}`;
+}
+
+function slideshowRequestOrigin(req) {
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+  const hostHeader = (req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+  if (!hostHeader) return '';
+
+  if (hostHeader.includes(':')) return `${proto}://${hostHeader}`;
+
+  const portHint = req.get('x-forwarded-port') || req.query.port;
+  const host = hostWithPort(hostHeader, portHint, proto);
+  return `${proto}://${host}`;
+}
+
+function slideshowCameraUiUrl(req, override) {
+  const portHint = typeof req.query.port === 'string' ? req.query.port : '';
+
+  if (override) {
+    try {
+      const u = new URL(override);
+      if (u.pathname === '/ui' || u.pathname === '/ui/') {
+        const host = u.port ? u.host : hostWithPort(u.hostname, u.port || portHint, u.protocol);
+        return `${u.protocol}//${host}/ui`;
+      }
+    } catch {
+      /* use request origin */
+    }
+  }
+
+  const origin = slideshowRequestOrigin(req);
+  return origin ? `${origin}/ui` : '/ui';
+}
+
 app.post('/upload', upload.single('photo'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Missing photo field (multipart form field name: photo)' });
@@ -206,12 +256,41 @@ app.get('/slideshow', (_req, res) => {
   res.type('html').send(SLIDESHOW_HTML);
 });
 
+app.get('/slideshow/qr.png', async (req, res) => {
+  if (!QRCodeLib) {
+    res.status(503).type('text/plain').send('QR not available');
+    return;
+  }
+  const w = Math.min(512, Math.max(64, Number(req.query.w) || 176));
+  const ecRaw = String(req.query.ec || 'M').toUpperCase();
+  const errorCorrectionLevel = ['L', 'M', 'Q', 'H'].includes(ecRaw) ? ecRaw : 'M';
+  const target = slideshowCameraUiUrl(req, typeof req.query.url === 'string' ? req.query.url : '');
+  try {
+    const buf = await QRCodeLib.toBuffer(target, {
+      type: 'png',
+      width: w,
+      margin: 1,
+      errorCorrectionLevel,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+    res.type('image/png');
+    res.set('Cache-Control', 'no-store');
+    res.send(buf);
+  } catch {
+    res.status(500).end();
+  }
+});
+
 app.get('/slideshow/photos', (_req, res) => {
   res.json({
-    photos: listPhotos().map((filename) => ({
-      filename,
-      url: `/photos/${encodeURIComponent(filename)}`,
-    })),
+    photos: listPhotos().map((filename) => {
+      const stat = fs.statSync(path.join(REPO_DIR, filename));
+      return {
+        filename,
+        url: `/photos/${encodeURIComponent(filename)}`,
+        mtime: stat.mtimeMs,
+      };
+    }),
   });
 });
 
@@ -505,7 +584,7 @@ const UI_HTML = `<!DOCTYPE html>
     <section class="card">
       <p class="card-title">How it works</p>
       <ol>
-        <li>Tap <strong>Take fotos</strong> to open your device camera.</li>
+        <li id="howCapture">Tap <strong>Take fotos</strong> to open your device camera.</li>
         <li>Each photo is uploaded immediately.</li>
       </ol>
     </section>
@@ -542,10 +621,38 @@ const UI_HTML = `<!DOCTYPE html>
     const MAX_STACK = 25;
     const takeBtn = document.getElementById('takeBtn');
     const input = document.getElementById('cameraInput');
+    const howCapture = document.getElementById('howCapture');
     const status = document.getElementById('status');
     const stackCard = document.getElementById('stackCard');
     const photoStack = document.getElementById('photoStack');
     const clearBtn = document.getElementById('clearBtn');
+
+    function isMobileDevice() {
+      return /Android|iPhone|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    function applyCaptureMode() {
+      const mobile = isMobileDevice();
+      takeBtn.textContent = mobile ? 'Take fotos' : 'Select Photos';
+      howCapture.innerHTML = mobile
+        ? 'Tap <strong>Take fotos</strong> to open your device camera.'
+        : 'Click <strong>Select Photos</strong> to choose one or more images.';
+      if (mobile) {
+        input.setAttribute('capture', 'environment');
+        input.multiple = false;
+      } else {
+        input.removeAttribute('capture');
+        input.multiple = true;
+      }
+    }
+
+    function isImageFile(file) {
+      if (!file) return false;
+      if (file.type && file.type.startsWith('image/')) return true;
+      if (file.name && /\.(jpe?g|png|gif|webp|heic|heif|bmp|avif|tif?f)$/i.test(file.name)) return true;
+      return !file.type;
+    }
 
     function setStatus(msg, type) {
       status.textContent = msg;
@@ -599,29 +706,66 @@ const UI_HTML = `<!DOCTYPE html>
 
     async function processCapture(file) {
       const imageFile = ensureImageFile(file);
-      takeBtn.disabled = true;
-      setStatus('Uploading…');
+      const result = await uploadFile(imageFile);
+      addToStack(result);
+      return result;
+    }
 
-      try {
-        const result = await uploadFile(imageFile);
-        addToStack(result);
-        setStatus('Uploaded: ' + result.filename, 'ok');
-      } catch (e) {
-        setStatus(e.message || 'Upload failed', 'err');
-      } finally {
-        takeBtn.disabled = false;
+    async function processSelectedFiles(files) {
+      const list = files.filter(isImageFile);
+      if (!list.length) {
+        setStatus('No image files selected', 'err');
+        return;
+      }
+
+      takeBtn.disabled = true;
+      let ok = 0;
+      let fail = 0;
+      const total = list.length;
+
+      for (let i = 0; i < total; i++) {
+        setStatus(total > 1 ? 'Uploading ' + (i + 1) + ' of ' + total + '…' : 'Uploading…');
+        try {
+          await processCapture(list[i]);
+          ok++;
+        } catch (e) {
+          fail++;
+          if (total === 1) {
+            setStatus(e.message || 'Upload failed', 'err');
+            takeBtn.disabled = false;
+            return;
+          }
+        }
+      }
+
+      takeBtn.disabled = false;
+      if (fail === 0) {
+        setStatus('Uploaded: ' + ok + (ok === 1 ? ' photo' : ' photos'), 'ok');
+      } else if (ok === 0) {
+        setStatus('Upload failed', 'err');
+      } else {
+        setStatus('Uploaded ' + ok + ', failed ' + fail, 'err');
       }
     }
 
     input.addEventListener('change', () => {
-      const file = input.files && input.files[0];
+      const files = Array.from(input.files || []);
       input.value = '';
-      if (!file) return;
-      void processCapture(file);
+      if (!files.length) return;
+      void processSelectedFiles(files);
     });
 
-    takeBtn.addEventListener('click', () => input.click());
+    takeBtn.addEventListener('click', () => {
+      if (typeof input.showPicker === 'function') {
+        try {
+          input.showPicker();
+          return;
+        } catch (_) {}
+      }
+      input.click();
+    });
     clearBtn.addEventListener('click', clearStack);
+    applyCaptureMode();
   </script>
 </body>
 </html>`;
@@ -1209,6 +1353,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       bottom: 1rem;
       z-index: 20;
       width: min(20rem, calc(100vw - 2rem));
+      max-height: min(85vh, calc(100vh - 2rem));
+      overflow-y: auto;
       padding: 0.85rem 1rem;
       border-radius: 12px;
       background: rgba(15, 23, 42, 0.92);
@@ -1269,6 +1415,79 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
     .menu-btn:hover { background: #475569; }
     .menu-btn:disabled { opacity: 0.45; cursor: default; }
+    .field-group-title {
+      margin: 0.5rem 0 0.35rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    .check-row input { accent-color: #6366f1; }
+    .field input[type="text"] {
+      width: 100%;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #f8fafc;
+      font-size: 0.85rem;
+    }
+    .qr-options.disabled { opacity: 0.45; pointer-events: none; }
+    #qrOverlay {
+      position: fixed;
+      z-index: 18;
+      pointer-events: none;
+      padding: 1rem;
+    }
+    #qrOverlay[hidden] { display: none !important; }
+    #qrOverlay.pos-tl { top: 0; left: 0; }
+    #qrOverlay.pos-tr { top: 0; right: 0; left: auto; }
+    #qrOverlay.pos-bl { bottom: 0; left: 0; top: auto; }
+    #qrOverlay.pos-br { bottom: 0; right: 0; top: auto; left: auto; }
+    .qr-card {
+      background: rgba(255, 255, 255, 0.94);
+      border-radius: 12px;
+      padding: 0.6rem 0.7rem 0.45rem;
+      box-shadow: 0 6px 28px rgba(0, 0, 0, 0.4);
+      text-align: center;
+    }
+    .qr-frame { position: relative; line-height: 0; }
+    #qrCanvas { display: block; width: 100%; height: auto; }
+    .qr-brand-custom { margin-top: 0.35rem; }
+    .qr-brand-custom.hidden { display: none; }
+    .qr-brand-custom label {
+      display: block;
+      font-size: 0.8rem;
+      margin-bottom: 0.25rem;
+      color: #cbd5e1;
+    }
+    .qr-brand-custom input[type="file"] {
+      width: 100%;
+      font-size: 0.75rem;
+      color: #e2e8f0;
+    }
+    #qrOverlay.size-small .qr-card { width: 9.5rem; }
+    #qrOverlay.size-medium .qr-card { width: 13rem; }
+    #qrOverlay.size-large .qr-card { width: 17.5rem; }
+    #qrOverlay.size-small #qrLabel { font-size: 0.8rem; }
+    #qrOverlay.size-medium #qrLabel { font-size: 0.95rem; }
+    #qrOverlay.size-large #qrLabel { font-size: 1.1rem; }
+    #qrLabel {
+      margin: 0.45rem 0 0;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.2;
+      word-break: break-word;
+    }
     .layer.from.fade { opacity: 1; }
     .layer.from.fade.animate { opacity: 0; }
     .layer.to.fade { opacity: 0; }
@@ -1382,6 +1601,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     <div id="staticOverlay" aria-hidden="true"></div>
   </div>
   <p id="empty">No photos uploaded yet.</p>
+  <div id="qrOverlay" class="pos-bl size-medium" hidden>
+    <div class="qr-card">
+      <div class="qr-frame">
+        <canvas id="qrCanvas" aria-label="QR code to open Camera UI"></canvas>
+      </div>
+      <p id="qrLabel">FotoBlast</p>
+    </div>
+  </div>
   <div id="menu" aria-label="Slideshow options">
     <h2>Slideshow</h2>
     <div class="field">
@@ -1420,6 +1647,39 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       </select>
     </div>
     <div class="field">
+      <p class="field-group-title">QR code (Camera UI)</p>
+      <label class="check-row">
+        <input type="checkbox" id="qrShow" checked>
+        Show QR code
+      </label>
+    </div>
+    <div class="field qr-options" id="qrOptions">
+      <label for="qrCorner">Corner</label>
+      <select id="qrCorner">
+        <option value="tl">Top left</option>
+        <option value="tr">Top right</option>
+        <option value="bl" selected>Bottom left</option>
+        <option value="br">Bottom right</option>
+      </select>
+      <label for="qrSize">Size</label>
+      <select id="qrSize">
+        <option value="small">Small</option>
+        <option value="medium" selected>Medium</option>
+        <option value="large">Large</option>
+      </select>
+      <label for="qrBrandMode">Branding</label>
+      <select id="qrBrandMode">
+        <option value="fotoblast" selected>FotoBlast</option>
+        <option value="custom">Custom image</option>
+      </select>
+      <div class="qr-brand-custom hidden" id="qrBrandCustom">
+        <label for="qrBrandFile">Brand image file</label>
+        <input type="file" id="qrBrandFile" accept="image/png,image/jpeg,image/webp,image/gif,image/*">
+      </div>
+      <label for="qrBrand">Label</label>
+      <input type="text" id="qrBrand" placeholder="FotoBlast" maxlength="48" autocomplete="off">
+    </div>
+    <div class="field">
       <button type="button" id="fullscreenBtn" class="menu-btn">Fullscreen</button>
     </div>
   </div>
@@ -1442,9 +1702,28 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const displayTimeVal = document.getElementById('displayTimeVal');
     const transitionSpeedVal = document.getElementById('transitionSpeedVal');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const qrShow = document.getElementById('qrShow');
+    const qrCorner = document.getElementById('qrCorner');
+    const qrSize = document.getElementById('qrSize');
+    const qrBrand = document.getElementById('qrBrand');
+    const qrBrandMode = document.getElementById('qrBrandMode');
+    const qrBrandCustom = document.getElementById('qrBrandCustom');
+    const qrBrandFile = document.getElementById('qrBrandFile');
+    const qrOptions = document.getElementById('qrOptions');
+    const qrOverlay = document.getElementById('qrOverlay');
+    const qrCanvas = document.getElementById('qrCanvas');
+    const qrLabel = document.getElementById('qrLabel');
+
+    const QR_DEFAULT_LABEL = 'FotoBlast';
+    const QR_DEFAULT_ICON = '/icons/favicon-96x96.png';
+    const QR_MARK_RATIO = 0.22;
+    const QR_PIXEL = { small: 120, medium: 176, large: 240 };
+    let qrBrandObjectUrl = null;
 
     let photos = [];
     let index = 0;
+    const photoLastShown = new Map();
+    const photoFirstSeen = new Map();
     let active = layerA;
     let idle = layerB;
     let holdTimer = null;
@@ -1482,12 +1761,54 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
     }
 
+    function markPhotoShown(filename) {
+      photoLastShown.set(filename, Date.now());
+    }
+
+    function prunePhotoTracking() {
+      const names = new Set(photos.map((p) => p.filename));
+      for (const key of photoLastShown.keys()) {
+        if (!names.has(key)) photoLastShown.delete(key);
+      }
+      for (const key of photoFirstSeen.keys()) {
+        if (!names.has(key)) photoFirstSeen.delete(key);
+      }
+    }
+
+    function pickNextIndex(excludeCurrent) {
+      if (!photos.length) return 0;
+      if (photos.length === 1) return 0;
+
+      const currentName = photos[index]?.filename;
+      let candidates = photos.map((p, i) => ({ i, p }));
+      if (excludeCurrent && currentName) {
+        candidates = candidates.filter((c) => c.p.filename !== currentName);
+      }
+      if (!candidates.length) return index;
+
+      const neverShown = candidates.filter((c) => !photoLastShown.has(c.p.filename));
+      if (neverShown.length) {
+        neverShown.sort((a, b) => {
+          const aTime = photoFirstSeen.get(a.p.filename) || a.p.mtime || 0;
+          const bTime = photoFirstSeen.get(b.p.filename) || b.p.mtime || 0;
+          return aTime - bTime;
+        });
+        return neverShown[0].i;
+      }
+
+      candidates.sort(
+        (a, b) => (photoLastShown.get(a.p.filename) || 0) - (photoLastShown.get(b.p.filename) || 0),
+      );
+      return candidates[0].i;
+    }
+
     function finishSwap(out, inn, nextIndex) {
       resetLayer(out, true);
       resetLayer(inn, false);
       active = inn;
       idle = out;
       index = nextIndex;
+      markPhotoShown(photos[index].filename);
       scheduleHold();
     }
 
@@ -1522,6 +1843,111 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function scheduleMenuHide() {
       showMenu();
+    }
+
+    function getQrBrandLabel() {
+      const text = qrBrand.value.trim();
+      return text || QR_DEFAULT_LABEL;
+    }
+
+    function syncQrBrandFields() {
+      const custom = qrBrandMode.value === 'custom';
+      qrBrandCustom.classList.toggle('hidden', !custom);
+      if (!custom && !qrBrand.value.trim()) qrBrand.placeholder = QR_DEFAULT_LABEL;
+    }
+
+    function getQrMarkSrc() {
+      if (qrBrandMode.value === 'custom') return qrBrandObjectUrl;
+      return QR_DEFAULT_ICON;
+    }
+
+    function loadImage(src) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+      });
+    }
+
+    function drawImageCover(ctx, img, x, y, w, h) {
+      const ir = img.naturalWidth / img.naturalHeight;
+      const dr = w / h;
+      let sw;
+      let sh;
+      let sx;
+      let sy;
+      if (ir > dr) {
+        sh = img.naturalHeight;
+        sw = sh * dr;
+        sx = (img.naturalWidth - sw) / 2;
+        sy = 0;
+      } else {
+        sw = img.naturalWidth;
+        sh = sw / dr;
+        sx = 0;
+        sy = (img.naturalHeight - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+    }
+
+    async function renderBrandedQr(canvas, qrUrl, markSrc) {
+      const qrImg = await loadImage(qrUrl);
+      const size = qrImg.naturalWidth;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(qrImg, 0, 0, size, size);
+      if (!markSrc) return;
+
+      const mark = await loadImage(markSrc);
+      const markSize = Math.round(size * QR_MARK_RATIO);
+      const pad = Math.max(4, Math.round(markSize * 0.14));
+      const box = markSize + pad * 2;
+      const bx = (size - box) / 2;
+      const by = (size - box) / 2;
+      const radius = Math.round(pad * 0.85);
+      ctx.fillStyle = '#ffffff';
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(bx, by, box, box, radius);
+        ctx.fill();
+      } else {
+        ctx.fillRect(bx, by, box, box);
+      }
+      drawImageCover(ctx, mark, bx + pad, by + pad, markSize, markSize);
+    }
+
+    function applyQrChrome() {
+      const on = qrShow.checked;
+      qrOptions.classList.toggle('disabled', !on);
+      if (!on) {
+        qrOverlay.hidden = true;
+        return;
+      }
+      qrOverlay.hidden = false;
+      qrOverlay.className = 'pos-' + qrCorner.value + ' size-' + qrSize.value;
+    }
+
+    async function updateQrOverlay() {
+      applyQrChrome();
+      syncQrBrandFields();
+      if (!qrShow.checked) return;
+
+      qrLabel.textContent = getQrBrandLabel();
+      const px = QR_PIXEL[qrSize.value] || QR_PIXEL.medium;
+      const uiUrl = location.protocol + '//' + location.host + '/ui';
+      const markSrc = getQrMarkSrc();
+      let qrSrc = '/slideshow/qr.png?w=' + px + '&url=' + encodeURIComponent(uiUrl);
+      if (location.port) qrSrc += '&port=' + encodeURIComponent(location.port);
+      if (markSrc) qrSrc += '&ec=H';
+
+      try {
+        await renderBrandedQr(qrCanvas, qrSrc, markSrc);
+        qrLabel.textContent = getQrBrandLabel();
+      } catch (_) {
+        qrLabel.textContent = markSrc ? 'Could not load QR' : 'Choose a brand image';
+      }
     }
 
     function isFullscreen() {
@@ -1560,7 +1986,18 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function setPhotoList(list) {
+      const prevCurrent = photos[index];
+      const prevNames = new Set(photos.map((p) => p.filename));
+      const now = Date.now();
+
       photos = [...list].sort((a, b) => a.filename.localeCompare(b.filename));
+      for (const p of photos) {
+        if (!prevNames.has(p.filename) && !photoFirstSeen.has(p.filename)) {
+          photoFirstSeen.set(p.filename, now);
+        }
+      }
+      prunePhotoTracking();
+
       if (!photos.length) {
         running = false;
         clearTimers();
@@ -1572,11 +2009,20 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         return;
       }
       emptyEl.classList.remove('visible');
-      if (index >= photos.length) index = 0;
+
+      if (prevCurrent) {
+        const kept = photos.findIndex((p) => p.filename === prevCurrent.filename);
+        index = kept >= 0 ? kept : 0;
+      } else if (index >= photos.length) {
+        index = 0;
+      }
+
       if (!running) {
         running = true;
+        index = pickNextIndex(false);
         active.src = photos[index].url;
         active.alt = photos[index].filename;
+        markPhotoShown(photos[index].filename);
         resetLayer(active, false);
         resetLayer(idle, true);
       }
@@ -1604,7 +2050,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       clearTimeout(holdTimer);
       holdTimer = null;
 
-      const nextIndex = (index + 1) % photos.length;
+      const nextIndex = pickNextIndex(true);
       const next = photos[nextIndex];
       const type = resolveTransitionType();
       const duration = getTransitionMs();
@@ -1659,6 +2105,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       clearTimers();
       active = layerA;
       idle = layerB;
+      markPhotoShown(photos[index].filename);
       active.src = photos[index].url;
       active.alt = photos[index].filename;
       resetLayer(active, false);
@@ -1678,6 +2125,23 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
     transitionTypeSelect.addEventListener('change', () => { scheduleMenuHide(); applySettings(); });
     fullscreenBtn.addEventListener('click', () => { void toggleFullscreen(); });
+    qrShow.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrCorner.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrSize.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrBrandMode.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrBrand.addEventListener('input', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrBrandFile.addEventListener('change', () => {
+      scheduleMenuHide();
+      if (qrBrandObjectUrl) URL.revokeObjectURL(qrBrandObjectUrl);
+      qrBrandObjectUrl = null;
+      const file = qrBrandFile.files && qrBrandFile.files[0];
+      if (file) {
+        qrBrandMode.value = 'custom';
+        qrBrandObjectUrl = URL.createObjectURL(file);
+      }
+      syncQrBrandFields();
+      void updateQrOverlay();
+    });
     document.addEventListener('fullscreenchange', updateFullscreenBtn);
     document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
     menu.addEventListener('input', scheduleMenuHide);
@@ -1690,6 +2154,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     updateLabels();
     updateFullscreenBtn();
+    syncQrBrandFields();
+    void updateQrOverlay();
     void loadPhotos();
   </script>
 </body>
