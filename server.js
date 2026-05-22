@@ -242,10 +242,6 @@ const UI_HTML = `<!DOCTYPE html>
       margin-bottom: 0.5rem;
     }
     #takeBtn:disabled { opacity: 0.6; cursor: wait; }
-    .sync {
-      background: #e5e7eb;
-      color: #111;
-    }
     #status {
       min-height: 1.25rem;
       font-size: 0.9rem;
@@ -256,36 +252,18 @@ const UI_HTML = `<!DOCTYPE html>
     #status.err { color: #b91c1c; }
     #previewWrap {
       display: none;
-      position: relative;
       margin-top: 0.75rem;
       border-radius: 8px;
       overflow: hidden;
-      touch-action: pan-y;
-      user-select: none;
     }
     #previewWrap.visible { display: block; }
     #preview {
       width: 100%;
       display: block;
       border-radius: 8px;
-      cursor: grab;
-    }
-    #previewWrap.saving #preview { opacity: 0.65; }
-    #swipeHint {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 0.5rem 0.65rem;
-      font-size: 0.8rem;
-      color: #fff;
-      background: linear-gradient(transparent, rgba(0,0,0,.55));
-      text-align: center;
-      pointer-events: none;
     }
     input[type="file"] { display: none; }
     code { font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 4px; }
-    .hint { font-size: 0.85rem; color: #6b7280; margin: 0.35rem 0 0; }
   </style>
 </head>
 <body>
@@ -293,44 +271,27 @@ const UI_HTML = `<!DOCTYPE html>
   <div class="card">
     <ol>
       <li>Tap <strong>Take fotos</strong> to open your device camera.</li>
-      <li>Each photo is uploaded immediately. <strong>Swipe the preview right</strong> to save a copy to this device’s photo library.</li>
-      <li>Use <strong>Sync photos</strong> on another device to download new photos as a ZIP (already downloaded photos are skipped via cookies).</li>
-      <li>On a desktop, open <a href="/receiver">Live receiver</a> to auto-download photos as they arrive.</li>
+      <li>Each photo is uploaded immediately.</li>
     </ol>
   </div>
   <div class="card">
     <button type="button" id="takeBtn">Take fotos</button>
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
-    <p class="hint">After a photo appears below, swipe it <strong>to the right</strong> to save on this device (iPhone/iPad: choose <strong>Save Image</strong> in the share sheet).</p>
     <div id="previewWrap">
       <img id="preview" alt="Last capture preview" draggable="false">
-      <div id="swipeHint">Swipe right → save to photo library</div>
     </div>
     <p id="status"></p>
   </div>
-  <div class="card">
-    <a class="btn sync" href="/sync">Sync photos (download ZIP)</a>
-  </div>
   <script>
-    const SWIPE_MIN_PX = 50;
     const takeBtn = document.getElementById('takeBtn');
     const input = document.getElementById('cameraInput');
     const status = document.getElementById('status');
     const preview = document.getElementById('preview');
     const previewWrap = document.getElementById('previewWrap');
 
-    let lastCaptureFile = null;
-    let swipeStartX = null;
-    let swipeStartY = null;
-
     function setStatus(msg, type) {
       status.textContent = msg;
       status.className = type || '';
-    }
-
-    function isIOS() {
-      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
 
     function ensureImageFile(file) {
@@ -338,68 +299,6 @@ const UI_HTML = `<!DOCTYPE html>
       const name = file.name && file.name.includes('.') ? file.name : 'photo.jpg';
       return new File([file], name, { type: 'image/jpeg', lastModified: file.lastModified });
     }
-
-    function saveViaDownload(file) {
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.name || 'fotoblast-' + Date.now() + '.jpg';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }
-
-    async function saveToDeviceLibrary(file) {
-      const imageFile = ensureImageFile(file);
-      previewWrap.classList.add('saving');
-
-      try {
-        if (isIOS() && navigator.share) {
-          if (navigator.canShare && !navigator.canShare({ files: [imageFile] })) {
-            throw new Error('Share not available for this image — try Safari');
-          }
-          setStatus('Tap Save Image in the share sheet', 'ok');
-          await navigator.share({ files: [imageFile], title: 'Save to Photos' });
-          setStatus('Saved to Photos (if you chose Save Image)', 'ok');
-          return;
-        }
-        saveViaDownload(imageFile);
-        setStatus('Saved to this device', 'ok');
-      } catch (e) {
-        if (e.name === 'AbortError') setStatus('Save cancelled', '');
-        else setStatus(e.message || 'Could not save', 'err');
-      } finally {
-        previewWrap.classList.remove('saving');
-      }
-    }
-
-    function onSwipeEnd(endX, endY) {
-      if (swipeStartX == null || !lastCaptureFile) return;
-      const dx = endX - swipeStartX;
-      const dy = endY - swipeStartY;
-      swipeStartX = null;
-      swipeStartY = null;
-      if (dx >= SWIPE_MIN_PX && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        void saveToDeviceLibrary(lastCaptureFile);
-      }
-    }
-
-    preview.addEventListener('pointerdown', (e) => {
-      swipeStartX = e.clientX;
-      swipeStartY = e.clientY;
-      preview.setPointerCapture(e.pointerId);
-    });
-
-    preview.addEventListener('pointerup', (e) => {
-      onSwipeEnd(e.clientX, e.clientY);
-      try { preview.releasePointerCapture(e.pointerId); } catch (_) {}
-    });
-
-    preview.addEventListener('pointercancel', () => {
-      swipeStartX = null;
-      swipeStartY = null;
-    });
 
     async function uploadFile(file) {
       const fd = new FormData();
@@ -411,19 +310,19 @@ const UI_HTML = `<!DOCTYPE html>
     }
 
     async function processCapture(file) {
-      lastCaptureFile = ensureImageFile(file);
+      const imageFile = ensureImageFile(file);
       takeBtn.disabled = true;
       setStatus('Uploading…');
       previewWrap.classList.remove('visible');
 
       try {
-        const previewUrl = URL.createObjectURL(lastCaptureFile);
+        const previewUrl = URL.createObjectURL(imageFile);
         preview.src = previewUrl;
         preview.onload = () => URL.revokeObjectURL(previewUrl);
 
-        const result = await uploadFile(lastCaptureFile);
+        const result = await uploadFile(imageFile);
         previewWrap.classList.add('visible');
-        setStatus('Uploaded: ' + result.filename + ' — swipe photo right to save on device', 'ok');
+        setStatus('Uploaded: ' + result.filename, 'ok');
       } catch (e) {
         setStatus(e.message || 'Upload failed', 'err');
       } finally {
