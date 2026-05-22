@@ -214,72 +214,193 @@ const UI_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
   <title>Fotoblast</title>
+  <script>
+    (function () {
+      var k = 'fotoblast-theme', t = localStorage.getItem(k);
+      if (t !== 'light' && t !== 'dark') {
+        t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <style>
     * { box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      margin: 0;
-      padding: 1.25rem;
-      max-width: 32rem;
-      margin-inline: auto;
-      line-height: 1.5;
-      color: #1a1a1a;
-      background: #f6f7f9;
+    [data-theme="light"] {
+      color-scheme: light;
+      --bg: #f4f6fb;
+      --bg-accent: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(99, 102, 241, 0.12), transparent 55%);
+      --surface: #ffffff;
+      --surface-muted: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-text: #ffffff;
+      --secondary: #e2e8f0;
+      --secondary-text: #1e293b;
+      --success: #059669;
+      --danger: #dc2626;
+      --code-bg: #f1f5f9;
+      --link: #4f46e5;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
     }
-    h1 { font-size: 1.35rem; margin: 0 0 0.75rem; }
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1rem 1.1rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b0f17;
+      --bg-accent: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(99, 102, 241, 0.18), transparent 55%);
+      --surface: #151b26;
+      --surface-muted: #1e2736;
+      --border: #2a3544;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-text: #ffffff;
+      --secondary: #2a3544;
+      --secondary-text: #e2e8f0;
+      --success: #34d399;
+      --danger: #f87171;
+      --code-bg: #1e2736;
+      --link: #818cf8;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.35);
+    }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--bg);
+      background-image: var(--bg-accent);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .app {
+      max-width: 28rem;
+      margin: 0 auto;
+      padding: 1rem 1.1rem 2rem;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
       margin-bottom: 1rem;
     }
-    ol { margin: 0; padding-left: 1.2rem; }
-    li { margin-bottom: 0.35rem; }
+    .brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+    .brand-mark {
+      flex-shrink: 0;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .theme-switch {
+      display: flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+    }
+    .theme-switch button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.35rem 0.55rem;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .theme-switch button[aria-pressed="true"] {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.1rem 1.15rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 0.85rem;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .card-title {
+      margin: 0 0 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    ol { margin: 0; padding-left: 1.15rem; color: var(--text); }
+    li { margin-bottom: 0.4rem; }
+    li:last-child { margin-bottom: 0; }
     button, .btn {
       display: inline-block;
       width: 100%;
-      padding: 0.85rem 1rem;
+      padding: 0.9rem 1rem;
       font-size: 1rem;
       font-weight: 600;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       cursor: pointer;
       text-align: center;
       text-decoration: none;
+      transition: background 0.15s, transform 0.1s, opacity 0.15s;
     }
+    button:active:not(:disabled) { transform: scale(0.98); }
     #takeBtn {
-      background: #2563eb;
-      color: #fff;
-      margin-bottom: 0.5rem;
+      background: var(--accent);
+      color: var(--accent-text);
+      box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
     }
-    #takeBtn:disabled { opacity: 0.6; cursor: wait; }
+    #takeBtn:hover:not(:disabled) { background: var(--accent-hover); }
+    #takeBtn:disabled { opacity: 0.55; cursor: wait; box-shadow: none; }
     #status {
       min-height: 1.25rem;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       margin-top: 0.75rem;
-      color: #374151;
+      color: var(--text-muted);
     }
-    #status.ok { color: #047857; }
-    #status.err { color: #b91c1c; }
+    #status.ok { color: var(--success); }
+    #status.err { color: var(--danger); }
     #clearBtn {
-      background: #e5e7eb;
-      color: #111;
+      background: var(--secondary);
+      color: var(--secondary-text);
       margin-bottom: 0.75rem;
     }
-    #clearBtn:disabled { opacity: 0.45; cursor: default; }
+    #clearBtn:hover:not(:disabled) { filter: brightness(0.96); }
+    #clearBtn:disabled { opacity: 0.4; cursor: default; }
     #stackCard { display: none; }
     #stackCard.visible { display: block; }
     #photoStack {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0.55rem;
     }
     .stack-item {
-      border-radius: 8px;
+      border-radius: 12px;
       overflow: hidden;
-      background: #f3f4f6;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
     }
     .stack-item img {
       width: 100%;
@@ -287,33 +408,70 @@ const UI_HTML = `<!DOCTYPE html>
       vertical-align: middle;
     }
     .stack-item .stack-label {
-      font-size: 0.75rem;
-      color: #6b7280;
-      padding: 0.35rem 0.5rem 0.45rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      padding: 0.4rem 0.55rem 0.5rem;
       word-break: break-all;
     }
     input[type="file"] { display: none; }
-    code { font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 4px; }
+    code {
+      font-size: 0.85em;
+      background: var(--code-bg);
+      color: var(--text);
+      padding: 0.12em 0.4em;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
-  <h1>Fotoblast</h1>
-  <div class="card">
-    <ol>
-      <li>Tap <strong>Take fotos</strong> to open your device camera.</li>
-      <li>Each photo is uploaded immediately.</li>
-    </ol>
-  </div>
-  <div class="card">
-    <button type="button" id="takeBtn">Take fotos</button>
-    <input type="file" id="cameraInput" accept="image/*" capture="environment">
-    <p id="status"></p>
-  </div>
-  <div class="card" id="stackCard">
-    <button type="button" id="clearBtn" disabled>Clear</button>
-    <div id="photoStack"></div>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">FB</span>
+        <h1>Fotoblast</h1>
+      </div>
+      <div class="theme-switch" role="group" aria-label="Theme">
+        <button type="button" data-theme-set="light">Light</button>
+        <button type="button" data-theme-set="dark">Dark</button>
+      </div>
+    </header>
+    <section class="card">
+      <p class="card-title">How it works</p>
+      <ol>
+        <li>Tap <strong>Take fotos</strong> to open your device camera.</li>
+        <li>Each photo is uploaded immediately.</li>
+      </ol>
+    </section>
+    <section class="card">
+      <p class="card-title">Capture</p>
+      <button type="button" id="takeBtn">Take fotos</button>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment">
+      <p id="status"></p>
+    </section>
+    <section class="card" id="stackCard">
+      <p class="card-title">Recent uploads</p>
+      <button type="button" id="clearBtn" disabled>Clear</button>
+      <div id="photoStack"></div>
+    </section>
   </div>
   <script>
+    (function () {
+      var KEY = 'fotoblast-theme';
+      function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        localStorage.setItem(KEY, t);
+        document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+          btn.setAttribute('aria-pressed', btn.getAttribute('data-theme-set') === t ? 'true' : 'false');
+        });
+      }
+      document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          applyTheme(btn.getAttribute('data-theme-set'));
+        });
+      });
+      applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+    })();
+
     const MAX_STACK = 25;
     const takeBtn = document.getElementById('takeBtn');
     const input = document.getElementById('cameraInput');
@@ -406,91 +564,305 @@ const RECEIVER_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Fotoblast Receiver</title>
+  <script>
+    (function () {
+      var k = 'fotoblast-theme', t = localStorage.getItem(k);
+      if (t !== 'light' && t !== 'dark') {
+        t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <style>
     * { box-sizing: border-box; }
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      margin: 0;
-      padding: 1.25rem;
-      max-width: 40rem;
-      margin-inline: auto;
-      line-height: 1.5;
-      background: #f6f7f9;
-      color: #1a1a1a;
+    [data-theme="light"] {
+      color-scheme: light;
+      --bg: #f4f6fb;
+      --bg-accent: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(99, 102, 241, 0.12), transparent 55%);
+      --surface: #ffffff;
+      --surface-muted: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-text: #ffffff;
+      --secondary: #e2e8f0;
+      --secondary-text: #1e293b;
+      --success: #059669;
+      --danger: #dc2626;
+      --code-bg: #f1f5f9;
+      --link: #4f46e5;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+      --nav-active: #eef2ff;
+      --nav-active-text: #4338ca;
     }
-    h1 { font-size: 1.35rem; margin: 0 0 0.5rem; }
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1rem 1.1rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b0f17;
+      --bg-accent: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(99, 102, 241, 0.18), transparent 55%);
+      --surface: #151b26;
+      --surface-muted: #1e2736;
+      --border: #2a3544;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-text: #ffffff;
+      --secondary: #2a3544;
+      --secondary-text: #e2e8f0;
+      --success: #34d399;
+      --danger: #f87171;
+      --code-bg: #1e2736;
+      --link: #818cf8;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.35);
+      --nav-active: #1e1b4b;
+      --nav-active-text: #a5b4fc;
+    }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--bg);
+      background-image: var(--bg-accent);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .app {
+      max-width: 36rem;
+      margin: 0 auto;
+      padding: 1rem 1.1rem 2rem;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
       margin-bottom: 1rem;
     }
-    #state { font-weight: 600; }
-    #state.live { color: #047857; }
-    #state.err { color: #b91c1c; }
+    .brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+    .brand-mark {
+      flex-shrink: 0;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .theme-switch {
+      display: flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+    }
+    .theme-switch button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.35rem 0.55rem;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .theme-switch button[aria-pressed="true"] {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+    .nav {
+      display: flex;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+      padding: 0.25rem;
+      border-radius: 12px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+    }
+    .nav-link {
+      flex: 1;
+      text-align: center;
+      padding: 0.5rem 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 9px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-link:hover { color: var(--text); }
+    .nav-link.is-active {
+      background: var(--nav-active);
+      color: var(--nav-active-text);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.1rem 1.15rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 0.85rem;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .card-title {
+      margin: 0 0 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .card > p:first-of-type:not(.card-title) { margin-top: 0; color: var(--text-muted); }
+    #state {
+      font-weight: 600;
+      margin: 0.75rem 0 0;
+      padding: 0.55rem 0.7rem;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    #state.live { color: var(--success); border-color: rgba(5, 150, 105, 0.25); }
+    #state.err { color: var(--danger); border-color: rgba(220, 38, 38, 0.25); }
     #log {
       margin: 0;
       padding: 0;
       list-style: none;
-      max-height: 20rem;
+      max-height: 22rem;
       overflow: auto;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
     }
-    #log li { padding: 0.35rem 0; border-bottom: 1px solid #eee; }
-    #log a { color: #2563eb; }
-    label { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
-    .folder-row { margin-top: 1rem; }
-    #folderPath {
+    #log li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    #log li:last-child { border-bottom: none; }
+    #log a { color: var(--link); font-weight: 500; }
+    label {
+      display: flex;
+      gap: 0.55rem;
+      align-items: center;
+      margin-top: 0.75rem;
       font-size: 0.9rem;
-      color: #374151;
-      margin: 0.5rem 0 0;
+      color: var(--text);
+      cursor: pointer;
+    }
+    label input { accent-color: var(--accent); }
+    .folder-row { margin-top: 1rem; }
+    .folder-row strong { font-size: 0.95rem; }
+    #folderPath {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin: 0.45rem 0 0;
       word-break: break-all;
     }
-    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.65rem; }
     .btn {
-      padding: 0.6rem 0.9rem;
-      font-size: 0.95rem;
+      padding: 0.65rem 1rem;
+      font-size: 0.9rem;
       font-weight: 600;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
-      background: #2563eb;
-      color: #fff;
+      background: var(--accent);
+      color: var(--accent-text);
+      transition: background 0.15s, transform 0.1s;
     }
-    .btn.secondary { background: #e5e7eb; color: #111; }
-    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
-    .hint { font-size: 0.85rem; color: #6b7280; margin: 0.5rem 0 0; }
+    .btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+    .btn.secondary { background: var(--secondary); color: var(--secondary-text); box-shadow: none; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hint { font-size: 0.82rem; color: var(--text-muted); margin: 0.55rem 0 0; line-height: 1.45; }
+    code {
+      font-size: 0.85em;
+      background: var(--code-bg);
+      color: var(--text);
+      padding: 0.12em 0.4em;
+      border-radius: 6px;
+    }
+    a { color: var(--link); }
   </style>
 </head>
 <body>
-  <h1>Live receiver</h1>
-  <div class="card">
-    <p>Stays connected to <code>/watch</code> and saves each new photo as it is uploaded.</p>
-    <p id="state">Connecting…</p>
-    <div class="folder-row">
-      <p><strong>Auto-save folder</strong></p>
-      <p id="folderPath">Not set — using browser Downloads</p>
-      <div class="btn-row">
-        <button type="button" class="btn" id="pickFolderBtn">Choose save folder…</button>
-        <button type="button" class="btn secondary" id="clearFolderBtn" hidden>Use browser Downloads</button>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">FB</span>
+        <h1>Receiver</h1>
       </div>
-      <p class="hint">Picks a folder only for this app. Your browser’s default download location stays unchanged. Requires Chrome or Edge on desktop.</p>
-    </div>
-    <label>
-      <input type="checkbox" id="autoDl" checked>
-      Auto-save new photos
-    </label>
-    <label>
-      <input type="checkbox" id="skipExisting" checked>
-      Skip photos already in repo when page loads
-    </label>
-  </div>
-  <div class="card">
-    <ul id="log"></ul>
+      <div class="theme-switch" role="group" aria-label="Theme">
+        <button type="button" data-theme-set="light">Light</button>
+        <button type="button" data-theme-set="dark">Dark</button>
+      </div>
+    </header>
+    <nav class="nav" aria-label="Pages">
+      <a class="nav-link" href="/ui">Camera</a>
+      <a class="nav-link is-active" href="/receiver" aria-current="page">Receiver</a>
+      <a class="nav-link" href="/slideshow">Slideshow</a>
+    </nav>
+    <section class="card">
+      <p class="card-title">Connection</p>
+      <p>Stays connected to <code>/watch</code> and saves each new photo as it is uploaded.</p>
+      <p id="state">Connecting…</p>
+      <div class="folder-row">
+        <p><strong>Auto-save folder</strong></p>
+        <p id="folderPath">Not set — using browser Downloads</p>
+        <div class="btn-row">
+          <button type="button" class="btn" id="pickFolderBtn">Choose save folder…</button>
+          <button type="button" class="btn secondary" id="clearFolderBtn" hidden>Use browser Downloads</button>
+        </div>
+        <p class="hint">Picks a folder only for this app. Your browser’s default download location stays unchanged. Requires Chrome or Edge on desktop.</p>
+      </div>
+      <label>
+        <input type="checkbox" id="autoDl" checked>
+        Auto-save new photos
+      </label>
+      <label>
+        <input type="checkbox" id="skipExisting" checked>
+        Skip photos already in repo when page loads
+      </label>
+    </section>
+    <section class="card">
+      <p class="card-title">Activity</p>
+      <ul id="log"></ul>
+    </section>
   </div>
   <script>
+    (function () {
+      var KEY = 'fotoblast-theme';
+      function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        localStorage.setItem(KEY, t);
+        document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+          btn.setAttribute('aria-pressed', btn.getAttribute('data-theme-set') === t ? 'true' : 'false');
+        });
+      }
+      document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          applyTheme(btn.getAttribute('data-theme-set'));
+        });
+      });
+      applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+    })();
+
     const STORAGE_KEY = 'fotoblast-received';
     const IDB_NAME = 'fotoblast-receiver';
     const IDB_STORE = 'settings';
