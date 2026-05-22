@@ -816,6 +816,19 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       color: #f8fafc;
       font-size: 0.85rem;
     }
+    .menu-btn {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      background: #334155;
+      color: #f8fafc;
+      cursor: pointer;
+    }
+    .menu-btn:hover { background: #475569; }
+    .menu-btn:disabled { opacity: 0.45; cursor: default; }
     .layer.from.fade { opacity: 1; }
     .layer.from.fade.animate { opacity: 0; }
     .layer.to.fade { opacity: 0; }
@@ -966,6 +979,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         <option value="bounce">Bounce</option>
       </select>
     </div>
+    <div class="field">
+      <button type="button" id="fullscreenBtn" class="menu-btn">Fullscreen</button>
+    </div>
   </div>
   <script>
     const RANDOM_TYPES = [
@@ -985,6 +1001,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const transitionTypeSelect = document.getElementById('transitionType');
     const displayTimeVal = document.getElementById('displayTimeVal');
     const transitionSpeedVal = document.getElementById('transitionSpeedVal');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
 
     let photos = [];
     let index = 0;
@@ -1065,6 +1082,41 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function scheduleMenuHide() {
       showMenu();
+    }
+
+    function isFullscreen() {
+      return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+
+    function fullscreenSupported() {
+      const el = document.documentElement;
+      return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+    }
+
+    function updateFullscreenBtn() {
+      if (!fullscreenSupported()) {
+        fullscreenBtn.disabled = true;
+        fullscreenBtn.textContent = 'Fullscreen unavailable';
+        return;
+      }
+      fullscreenBtn.disabled = false;
+      fullscreenBtn.textContent = isFullscreen() ? 'Exit fullscreen' : 'Fullscreen';
+    }
+
+    async function toggleFullscreen() {
+      scheduleMenuHide();
+      if (!fullscreenSupported()) return;
+      try {
+        if (isFullscreen()) {
+          if (document.exitFullscreen) await document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        } else {
+          const el = document.documentElement;
+          if (el.requestFullscreen) await el.requestFullscreen();
+          else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        }
+      } catch (_) {}
+      updateFullscreenBtn();
     }
 
     function setPhotoList(list) {
@@ -1185,6 +1237,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
     transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
     transitionTypeSelect.addEventListener('change', () => { scheduleMenuHide(); applySettings(); });
+    fullscreenBtn.addEventListener('click', () => { void toggleFullscreen(); });
+    document.addEventListener('fullscreenchange', updateFullscreenBtn);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
     menu.addEventListener('input', scheduleMenuHide);
     menu.addEventListener('click', scheduleMenuHide);
     menu.addEventListener('focusin', scheduleMenuHide);
@@ -1194,6 +1249,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     watch.addEventListener('photo', () => { void loadPhotos(); });
 
     updateLabels();
+    updateFullscreenBtn();
     void loadPhotos();
   </script>
 </body>
