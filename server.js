@@ -1609,10 +1609,54 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     .layer.from.zoom-out.animate { opacity: 0; transform: scale(0.85); }
     .layer.to.zoom-out { opacity: 0; transform: scale(1.15); }
     .layer.to.zoom-out.animate { opacity: 1; transform: scale(1); }
+    .layer.from.blur,
+    .layer.to.blur {
+      transition: none !important;
+    }
     .layer.from.blur { opacity: 1; filter: blur(0); }
-    .layer.from.blur.animate { opacity: 0; filter: blur(12px); }
-    .layer.to.blur { opacity: 0; filter: blur(12px); }
-    .layer.to.blur.animate { opacity: 1; filter: blur(0); }
+    .layer.from.blur.run {
+      animation: slideshow-blur-out var(--effect-duration, 800ms) ease-in forwards;
+    }
+    .layer.to.blur { opacity: 0; filter: blur(80px); }
+    .layer.to.blur.run {
+      animation: slideshow-blur-in var(--effect-duration, 800ms) ease-in forwards;
+    }
+    @keyframes slideshow-blur-out {
+      0% { opacity: 1; filter: blur(0); }
+      50% { opacity: 1; filter: blur(80px); }
+      70% { opacity: 0; filter: blur(80px); }
+      100% { opacity: 0; filter: blur(80px); }
+    }
+    @keyframes slideshow-blur-in {
+      0% { opacity: 0; filter: blur(80px); }
+      50% { opacity: 0; filter: blur(80px); }
+      70% { opacity: 1; filter: blur(80px); }
+      100% { opacity: 1; filter: blur(0); }
+    }
+    .layer.from.scan,
+    .layer.to.scan {
+      transition: none !important;
+    }
+    .layer.from.scan { opacity: 1; filter: blur(0); transform: translateX(0); }
+    .layer.from.scan.run {
+      animation: slideshow-scan-out var(--effect-duration, 800ms) ease-in-out forwards;
+    }
+    .layer.to.scan { opacity: 1; filter: blur(80px); transform: translateX(105%); }
+    .layer.to.scan.run {
+      animation: slideshow-scan-in var(--effect-duration, 800ms) ease-in-out forwards;
+    }
+    @keyframes slideshow-scan-out {
+      0% { opacity: 1; filter: blur(0); transform: translateX(0); }
+      50% { opacity: 1; filter: blur(80px); transform: translateX(0); }
+      70% { opacity: 1; filter: blur(80px); transform: translateX(-105%); }
+      100% { opacity: 0; filter: blur(80px); transform: translateX(-105%); }
+    }
+    @keyframes slideshow-scan-in {
+      0% { opacity: 1; filter: blur(80px); transform: translateX(105%); }
+      50% { opacity: 1; filter: blur(80px); transform: translateX(105%); }
+      70% { opacity: 1; filter: blur(80px); transform: translateX(0); }
+      100% { opacity: 1; filter: blur(0); transform: translateX(0); }
+    }
     .layer.from.rotate { opacity: 1; transform: rotate(0deg) scale(1); }
     .layer.from.rotate.animate { opacity: 0; transform: rotate(-12deg) scale(0.9); }
     .layer.to.rotate { opacity: 0; transform: rotate(12deg) scale(0.9); }
@@ -1710,7 +1754,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     </div>
     <div class="field">
       <label for="transitionSpeed">Transition speed <span id="transitionSpeedVal">0.8s</span></label>
-      <input type="range" id="transitionSpeed" min="0.1" max="3" step="0.1" value="0.8">
+      <input type="range" id="transitionSpeed" min="0.1" max="10" step="0.1" value="0.8">
     </div>
     <div class="field">
       <label for="transitionPickerBtn">Transitions</label>
@@ -1776,6 +1820,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       { value: 'zoom-in', label: 'Zoom in' },
       { value: 'zoom-out', label: 'Zoom out' },
       { value: 'blur', label: 'Blur' },
+      { value: 'scan', label: 'Scan' },
       { value: 'rotate', label: 'Rotate' },
       { value: 'flip-h', label: 'Flip horizontal' },
       { value: 'flip-v', label: 'Flip vertical' },
@@ -1927,11 +1972,15 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     updateTransitionSummary();
 
     function applyTransitionTiming(out, inn, type, duration) {
-      const ms = duration + 'ms';
-      out.style.transitionDuration = ms;
-      inn.style.transitionDuration = ms;
-      out.style.transitionTimingFunction = '';
-      inn.style.transitionTimingFunction = '';
+      clearLayerTransition(out);
+      clearLayerTransition(inn);
+      if (type !== 'blur' && type !== 'scan') {
+        const ms = duration + 'ms';
+        out.style.transitionDuration = ms;
+        inn.style.transitionDuration = ms;
+        out.style.transitionTimingFunction = '';
+        inn.style.transitionTimingFunction = '';
+      }
       if (type === 'bounce') {
         inn.style.transitionTimingFunction = 'cubic-bezier(0.34, 1.45, 0.64, 1)';
       } else if (type === 'smash') {
@@ -2002,9 +2051,50 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       transitionTimer = null;
     }
 
+    function clearLayerTransition(el) {
+      el.style.transitionProperty = '';
+      el.style.transitionDuration = '';
+      el.style.transitionDelay = '';
+      el.style.transitionTimingFunction = '';
+    }
+
+    function clearEffectRun(el) {
+      el.classList.remove('run');
+      el.style.removeProperty('--effect-duration');
+      el.style.animation = '';
+      el.style.transform = '';
+    }
+
+    function clearLayerVisual(el) {
+      clearLayerTransition(el);
+      clearEffectRun(el);
+      el.style.filter = '';
+      el.style.opacity = '';
+    }
+
     function resetLayer(el, off) {
       el.className = off ? 'layer off' : 'layer';
-      el.style.transitionDuration = '';
+      clearLayerVisual(el);
+    }
+
+    function waitForLayerPaint(el) {
+      return new Promise((resolve, reject) => {
+        const done = () => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+          });
+        };
+        if (el.complete && el.naturalWidth > 0) done();
+        else {
+          el.addEventListener('load', done, { once: true });
+          el.addEventListener('error', reject, { once: true });
+        }
+      });
+    }
+
+    function commitTransitionFrame(out, inn) {
+      void out.offsetWidth;
+      void inn.offsetWidth;
     }
 
     function waitMs(ms) {
@@ -2272,11 +2362,27 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           return;
         }
 
+        if (type === 'blur' || type === 'scan') {
+          const effectDur = duration + 'ms';
+          out.className = 'layer from ' + type;
+          inn.className = 'layer to ' + type;
+          out.style.setProperty('--effect-duration', effectDur);
+          inn.style.setProperty('--effect-duration', effectDur);
+          await waitForLayerPaint(inn);
+          commitTransitionFrame(out, inn);
+          out.classList.add('run');
+          inn.classList.add('run');
+          await waitMs(duration);
+          finishSwap(out, inn, nextIndex);
+          return;
+        }
+
         out.className = 'layer from ' + type;
         inn.className = 'layer to ' + type;
         applyTransitionTiming(out, inn, type, duration);
 
         void out.offsetWidth;
+        void inn.offsetWidth;
         out.classList.add('animate');
         inn.classList.add('animate');
 
