@@ -7,10 +7,39 @@ const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT) || 3000;
 const REPO_DIR = process.env.REPO_DIR || path.join(__dirname, 'repo');
+const ICONS_DIR = path.join(__dirname, 'icons');
 const SYNC_COOKIE = 'synced_photos';
 const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
 
+const ICON_PUBLIC_NAMES = [
+  'favicon.ico',
+  'favicon-16x16.png',
+  'favicon-32x32.png',
+  'favicon-48x48.png',
+  'favicon-96x96.png',
+  'apple-touch-icon.png',
+  'android-chrome-192x192.png',
+  'android-chrome-512x512.png',
+];
+
 fs.mkdirSync(REPO_DIR, { recursive: true });
+
+for (const name of ICON_PUBLIC_NAMES) {
+  const filePath = path.join(ICONS_DIR, name);
+  if (!fs.existsSync(filePath)) {
+    console.warn(`Warning: missing icon ${name} at ${filePath}`);
+  }
+}
+
+function sendIcon(res, name) {
+  const filePath = path.join(ICONS_DIR, name);
+  res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+  if (name.endsWith('.ico')) res.type('image/x-icon');
+  else res.type('png');
+  res.sendFile(filePath, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+}
 
 const watchers = new Set();
 
@@ -32,6 +61,34 @@ function broadcastPhoto(meta) {
 
 const app = express();
 app.use(express.json());
+
+for (const name of ICON_PUBLIC_NAMES) {
+  app.get(`/${name}`, (_req, res) => sendIcon(res, name));
+}
+
+app.use(
+  '/icons',
+  express.static(ICONS_DIR, {
+    maxAge: '7d',
+    immutable: true,
+    fallthrough: false,
+  }),
+);
+
+app.get('/site.webmanifest', (_req, res) => {
+  res.type('application/manifest+json');
+  res.json({
+    name: 'Fotoblast',
+    short_name: 'Fotoblast',
+    icons: [
+      { src: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    theme_color: '#4f46e5',
+    background_color: '#ffffff',
+    display: 'standalone',
+  });
+});
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, REPO_DIR),
@@ -209,6 +266,16 @@ app.listen(PORT, () => {
   console.log(`Repo directory: ${REPO_DIR}`);
 });
 
+const FAVICON_LINK = `<link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">`;
+const BRAND_LOGO_HTML =
+  '<img class="brand-logo" src="/favicon-96x96.png" width="36" height="36" alt="">';
+
 const UI_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -216,6 +283,7 @@ const UI_HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <title>Fotoblast</title>
+  ${FAVICON_LINK}
   <script>
     (function () {
       var k = 'fotoblast-theme', t = localStorage.getItem(k);
@@ -294,15 +362,14 @@ const UI_HTML = `<!DOCTYPE html>
       flex-shrink: 0;
       width: 2.25rem;
       height: 2.25rem;
-      border-radius: 10px;
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: #fff;
-      font-size: 0.7rem;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
+      line-height: 0;
+    }
+    .brand-logo {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
     }
     .brand h1 {
       margin: 0;
@@ -427,7 +494,7 @@ const UI_HTML = `<!DOCTYPE html>
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">FB</span>
+        <span class="brand-mark" aria-hidden="true">${BRAND_LOGO_HTML}</span>
         <h1>Fotoblast</h1>
       </div>
       <div class="theme-switch" role="group" aria-label="Theme">
@@ -566,6 +633,7 @@ const RECEIVER_HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Fotoblast Receiver</title>
+  ${FAVICON_LINK}
   <script>
     (function () {
       var k = 'fotoblast-theme', t = localStorage.getItem(k);
@@ -648,15 +716,14 @@ const RECEIVER_HTML = `<!DOCTYPE html>
       flex-shrink: 0;
       width: 2.25rem;
       height: 2.25rem;
-      border-radius: 10px;
-      background: linear-gradient(135deg, var(--accent), #7c3aed);
-      color: #fff;
-      font-size: 0.7rem;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
+      line-height: 0;
+    }
+    .brand-logo {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
     }
     .brand h1 {
       margin: 0;
@@ -805,7 +872,7 @@ const RECEIVER_HTML = `<!DOCTYPE html>
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">FB</span>
+        <span class="brand-mark" aria-hidden="true">${BRAND_LOGO_HTML}</span>
         <h1>Receiver</h1>
       </div>
       <div class="theme-switch" role="group" aria-label="Theme">
@@ -1087,6 +1154,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fotoblast Slideshow</title>
+  ${FAVICON_LINK}
   <style>
     * { box-sizing: border-box; }
     html, body {
