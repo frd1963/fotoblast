@@ -872,12 +872,61 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     .layer.from.push.animate { opacity: 0.6; transform: scale(0.92); }
     .layer.to.push { opacity: 0; transform: scale(1.08); }
     .layer.to.push.animate { opacity: 1; transform: scale(1); }
+    .layer.from.fade-black { opacity: 1; filter: brightness(1); }
+    .layer.from.fade-black.animate { opacity: 0; filter: brightness(0); }
+    .layer.to.fade-black { opacity: 0; filter: brightness(0); }
+    .layer.to.fade-black.animate { opacity: 1; filter: brightness(1); }
+    .layer.from.morph { opacity: 1; filter: blur(0) saturate(1); transform: scale(1) skewX(0deg); }
+    .layer.from.morph.animate { opacity: 0; filter: blur(16px) saturate(1.4); transform: scale(1.06) skewX(4deg); }
+    .layer.to.morph { opacity: 0; filter: blur(16px) saturate(0.7); transform: scale(0.94) skewX(-4deg); }
+    .layer.to.morph.animate { opacity: 1; filter: blur(0) saturate(1); transform: scale(1) skewX(0deg); }
+    .layer.from.shatter { opacity: 1; transform: scale(1) rotate(0deg); clip-path: inset(0 0 0 0); filter: blur(0); }
+    .layer.from.shatter.animate { opacity: 0; transform: scale(1.14) rotate(7deg); clip-path: polygon(8% 0, 92% 4%, 100% 38%, 62% 52%, 96% 100%, 4% 92%, 0 36%); filter: blur(5px); }
+    .layer.to.shatter { opacity: 0; transform: scale(0.86) rotate(-6deg); clip-path: inset(12% 8% 12% 8%); filter: blur(10px); }
+    .layer.to.shatter.animate { opacity: 1; transform: scale(1) rotate(0deg); clip-path: inset(0 0 0 0); filter: blur(0); }
+    .layer.from.smash { opacity: 1; transform: scale(1); }
+    .layer.from.smash.animate { opacity: 0; transform: scale(0.75); filter: brightness(0.6); }
+    .layer.to.smash { opacity: 0; transform: translateY(-35%) scale(1.35); }
+    .layer.to.smash.animate { opacity: 1; transform: translateY(0) scale(1); transition-timing-function: cubic-bezier(0.2, 0.9, 0.2, 1); }
+    .layer.from.bounce { opacity: 1; transform: scale(1); }
+    .layer.from.bounce.animate { opacity: 0; transform: scale(0.88); }
+    .layer.to.bounce { opacity: 0; transform: scale(0.25); }
+    .layer.to.bounce.animate { opacity: 1; transform: scale(1); transition-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1); }
+    #staticOverlay {
+      position: absolute;
+      inset: 0;
+      z-index: 15;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.1s ease;
+      background: #000;
+      overflow: hidden;
+    }
+    #staticOverlay::before {
+      content: '';
+      position: absolute;
+      inset: -80%;
+      width: 260%;
+      height: 260%;
+      opacity: 0.92;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      animation: static-jitter 0.12s steps(5) infinite;
+    }
+    #stage.static-on #staticOverlay { opacity: 1; }
+    @keyframes static-jitter {
+      0% { transform: translate(0, 0); }
+      25% { transform: translate(-3%, 2%); }
+      50% { transform: translate(2%, -3%); }
+      75% { transform: translate(-2%, -1%); }
+      100% { transform: translate(3%, 1%); }
+    }
   </style>
 </head>
 <body>
   <div id="stage">
     <img id="layerA" class="layer" alt="" decoding="async">
     <img id="layerB" class="layer off" alt="" decoding="async">
+    <div id="staticOverlay" aria-hidden="true"></div>
   </div>
   <p id="empty">No photos uploaded yet.</p>
   <div id="menu" aria-label="Slideshow options">
@@ -893,6 +942,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     <div class="field">
       <label for="transitionType">Transition type</label>
       <select id="transitionType">
+        <option value="none" selected>None</option>
+        <option value="random">Random</option>
         <option value="fade">Fade</option>
         <option value="slide-left">Slide left</option>
         <option value="slide-right">Slide right</option>
@@ -907,12 +958,26 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         <option value="wipe-left">Wipe left</option>
         <option value="dissolve">Dissolve</option>
         <option value="push">Push</option>
+        <option value="fade-black">Fade to/from black</option>
+        <option value="morph">Morph</option>
+        <option value="shatter">Shatter</option>
+        <option value="static">TV static</option>
+        <option value="smash">Smash</option>
+        <option value="bounce">Bounce</option>
       </select>
     </div>
   </div>
   <script>
+    const RANDOM_TYPES = [
+      'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down',
+      'zoom-in', 'zoom-out', 'blur', 'rotate', 'flip-h', 'flip-v',
+      'wipe-left', 'dissolve', 'push', 'fade-black', 'morph', 'shatter',
+      'static', 'smash', 'bounce',
+    ];
+
     const layerA = document.getElementById('layerA');
     const layerB = document.getElementById('layerB');
+    const stage = document.getElementById('stage');
     const emptyEl = document.getElementById('empty');
     const menu = document.getElementById('menu');
     const displayTimeInput = document.getElementById('displayTime');
@@ -939,8 +1004,34 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return Math.round(Number(transitionSpeedInput.value) * 1000);
     }
 
-    function getTransitionType() {
-      return transitionTypeSelect.value;
+    function resolveTransitionType() {
+      const choice = transitionTypeSelect.value;
+      if (choice === 'random') {
+        return RANDOM_TYPES[Math.floor(Math.random() * RANDOM_TYPES.length)];
+      }
+      return choice;
+    }
+
+    function applyTransitionTiming(out, inn, type, duration) {
+      const ms = duration + 'ms';
+      out.style.transitionDuration = ms;
+      inn.style.transitionDuration = ms;
+      out.style.transitionTimingFunction = '';
+      inn.style.transitionTimingFunction = '';
+      if (type === 'bounce') {
+        inn.style.transitionTimingFunction = 'cubic-bezier(0.34, 1.45, 0.64, 1)';
+      } else if (type === 'smash') {
+        inn.style.transitionTimingFunction = 'cubic-bezier(0.2, 0.9, 0.2, 1)';
+      }
+    }
+
+    function finishSwap(out, inn, nextIndex) {
+      resetLayer(out, true);
+      resetLayer(inn, false);
+      active = inn;
+      idle = out;
+      index = nextIndex;
+      scheduleHold();
     }
 
     function updateLabels() {
@@ -1023,7 +1114,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
       const nextIndex = (index + 1) % photos.length;
       const next = photos[nextIndex];
-      const type = getTransitionType();
+      const type = resolveTransitionType();
       const duration = getTransitionMs();
 
       try {
@@ -1039,23 +1130,31 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
         inn.src = next.url;
         inn.alt = next.filename;
+
+        if (type === 'none') {
+          finishSwap(out, inn, nextIndex);
+          return;
+        }
+
+        if (type === 'static') {
+          stage.classList.add('static-on');
+          await waitMs(Math.round(duration * 0.5));
+          finishSwap(out, inn, nextIndex);
+          await waitMs(Math.round(duration * 0.5));
+          stage.classList.remove('static-on');
+          return;
+        }
+
         out.className = 'layer from ' + type;
         inn.className = 'layer to ' + type;
-        out.style.transitionDuration = duration + 'ms';
-        inn.style.transitionDuration = duration + 'ms';
+        applyTransitionTiming(out, inn, type, duration);
 
         void out.offsetWidth;
         out.classList.add('animate');
         inn.classList.add('animate');
 
         await waitMs(duration);
-
-        resetLayer(out, true);
-        resetLayer(inn, false);
-        active = inn;
-        idle = out;
-        index = nextIndex;
-        scheduleHold();
+        finishSwap(out, inn, nextIndex);
       } finally {
         transitioning = false;
       }
@@ -1073,6 +1172,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       resetLayer(active, false);
       resetLayer(idle, true);
       idle.removeAttribute('src');
+      stage.classList.remove('static-on');
       if (photos.length >= 2) scheduleHold();
     }
 
