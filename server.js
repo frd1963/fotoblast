@@ -1740,13 +1740,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         <option value="medium" selected>Medium</option>
         <option value="large">Large</option>
       </select>
-      <label for="qrBrandMode">Branding</label>
-      <select id="qrBrandMode">
-        <option value="fotoblast" selected>FotoBlast</option>
-        <option value="custom">Custom image</option>
+      <label for="qrBrandImage">Brand image</label>
+      <select id="qrBrandImage">
+        <option value="none">None</option>
+        <option value="fotoblast" selected>FotoBlast icon</option>
+        <option value="custom">Custom image…</option>
       </select>
       <div class="qr-brand-custom hidden" id="qrBrandCustom">
-        <label for="qrBrandFile">Brand image file</label>
+        <label for="qrBrandFile">Choose image file</label>
         <input type="file" id="qrBrandFile" accept="image/png,image/jpeg,image/webp,image/gif,image/*">
       </div>
       <label for="qrBrand">Label</label>
@@ -1808,7 +1809,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const qrCorner = document.getElementById('qrCorner');
     const qrSize = document.getElementById('qrSize');
     const qrBrand = document.getElementById('qrBrand');
-    const qrBrandMode = document.getElementById('qrBrandMode');
+    const qrBrandImage = document.getElementById('qrBrandImage');
     const qrBrandCustom = document.getElementById('qrBrandCustom');
     const qrBrandFile = document.getElementById('qrBrandFile');
     const qrOptions = document.getElementById('qrOptions');
@@ -2029,14 +2030,15 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function syncQrBrandFields() {
-      const custom = qrBrandMode.value === 'custom';
+      const custom = qrBrandImage.value === 'custom';
       qrBrandCustom.classList.toggle('hidden', !custom);
-      if (!custom && !qrBrand.value.trim()) qrBrand.placeholder = QR_DEFAULT_LABEL;
+      if (!qrBrand.value.trim()) qrBrand.placeholder = QR_DEFAULT_LABEL;
     }
 
     function getQrMarkSrc() {
-      if (qrBrandMode.value === 'custom') return qrBrandObjectUrl;
-      return QR_DEFAULT_ICON;
+      if (qrBrandImage.value === 'none') return null;
+      if (qrBrandImage.value === 'fotoblast') return QR_DEFAULT_ICON;
+      return qrBrandObjectUrl;
     }
 
     function loadImage(src) {
@@ -2127,9 +2129,13 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
       try {
         await renderBrandedQr(qrCanvas, qrSrc, markSrc);
-        qrLabel.textContent = getQrBrandLabel();
+        if (qrBrandImage.value === 'custom' && !qrBrandObjectUrl) {
+          qrLabel.textContent = 'Choose a brand image';
+        } else {
+          qrLabel.textContent = getQrBrandLabel();
+        }
       } catch (_) {
-        qrLabel.textContent = markSrc ? 'Could not load QR' : 'Choose a brand image';
+        qrLabel.textContent = 'Could not load QR';
       }
     }
 
@@ -2329,7 +2335,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     qrShow.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrCorner.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrSize.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
-    qrBrandMode.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrBrandImage.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrand.addEventListener('input', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrandFile.addEventListener('change', () => {
       scheduleMenuHide();
@@ -2337,7 +2343,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       qrBrandObjectUrl = null;
       const file = qrBrandFile.files && qrBrandFile.files[0];
       if (file) {
-        qrBrandMode.value = 'custom';
+        qrBrandImage.value = 'custom';
         qrBrandObjectUrl = URL.createObjectURL(file);
       }
       syncQrBrandFields();
