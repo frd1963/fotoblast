@@ -256,7 +256,7 @@ app.get('/slideshow', (_req, res) => {
   res.type('html').send(SLIDESHOW_HTML);
 });
 
-app.get('/slideshow/qr.png', async (req, res) => {
+async function sendQrPng(req, res) {
   if (!QRCodeLib) {
     res.status(503).type('text/plain').send('QR not available');
     return;
@@ -279,7 +279,11 @@ app.get('/slideshow/qr.png', async (req, res) => {
   } catch {
     res.status(500).end();
   }
-});
+}
+
+app.get('/qr', sendQrPng);
+app.get('/qr.png', sendQrPng);
+app.get('/slideshow/qr.png', sendQrPng);
 
 app.get('/slideshow/photos', (_req, res) => {
   res.json({
@@ -2103,6 +2107,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       qrOverlay.className = 'pos-' + qrCorner.value + ' size-' + qrSize.value;
     }
 
+    function buildQrImageUrl(px, withLogo) {
+      const uiUrl = location.protocol + '//' + location.host + '/ui';
+      let url = '/qr?w=' + px + '&url=' + encodeURIComponent(uiUrl);
+      if (location.port) url += '&port=' + encodeURIComponent(location.port);
+      if (withLogo) url += '&ec=H';
+      return url;
+    }
+
     async function updateQrOverlay() {
       applyQrChrome();
       syncQrBrandFields();
@@ -2110,11 +2122,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
       qrLabel.textContent = getQrBrandLabel();
       const px = QR_PIXEL[qrSize.value] || QR_PIXEL.medium;
-      const uiUrl = location.protocol + '//' + location.host + '/ui';
       const markSrc = getQrMarkSrc();
-      let qrSrc = '/slideshow/qr.png?w=' + px + '&url=' + encodeURIComponent(uiUrl);
-      if (location.port) qrSrc += '&port=' + encodeURIComponent(location.port);
-      if (markSrc) qrSrc += '&ec=H';
+      const qrSrc = buildQrImageUrl(px, !!markSrc);
 
       try {
         await renderBrandedQr(qrCanvas, qrSrc, markSrc);
