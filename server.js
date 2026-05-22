@@ -1355,6 +1355,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       width: min(20rem, calc(100vw - 2rem));
       max-height: min(85vh, calc(100vh - 2rem));
       overflow-y: auto;
+      overflow-x: visible;
       padding: 0.85rem 1rem;
       border-radius: 12px;
       background: rgba(15, 23, 42, 0.92);
@@ -1381,6 +1382,10 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
     .field {
       margin-bottom: 0.65rem;
+    }
+    #menu.menu-transition-open {
+      max-height: none;
+      overflow: visible;
     }
     .field:last-child { margin-bottom: 0; }
     .field label {
@@ -1432,6 +1437,90 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       cursor: pointer;
     }
     .check-row input { accent-color: #6366f1; }
+    .transition-picker-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+      padding: 0.4rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #f8fafc;
+      font-size: 0.85rem;
+      cursor: pointer;
+      text-align: left;
+    }
+    .transition-picker-btn:hover { border-color: #475569; }
+    .transition-picker-chevron {
+      flex-shrink: 0;
+      font-size: 0.7rem;
+      color: #94a3b8;
+    }
+    #transitionPickerSummary {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .transition-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      border-radius: inherit;
+      background: rgba(15, 23, 42, 0.55);
+    }
+    .transition-overlay[hidden] { display: none !important; }
+    .transition-sheet {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: #0f172a;
+      border-radius: inherit;
+      border: 1px solid #475569;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+    .transition-sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.55rem 0.65rem;
+      border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+    }
+    .transition-sheet-head h3 {
+      margin: 0;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .transition-close-btn {
+      border: none;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 1.35rem;
+      line-height: 1;
+      padding: 0.1rem 0.35rem;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .transition-close-btn:hover { color: #f8fafc; background: #334155; }
+    .transition-sheet-body {
+      padding: 0.45rem 0.6rem 0.6rem;
+      overflow: visible;
+    }
+    .transition-select-all {
+      margin-bottom: 0.35rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #334155;
+      font-weight: 600;
+    }
+    .transition-option { margin: 0.15rem 0; }
     .field input[type="text"] {
       width: 100%;
       padding: 0.4rem 0.5rem;
@@ -1620,31 +1709,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       <input type="range" id="transitionSpeed" min="0.1" max="3" step="0.1" value="0.8">
     </div>
     <div class="field">
-      <label for="transitionType">Transition type</label>
-      <select id="transitionType">
-        <option value="none" selected>None</option>
-        <option value="random">Random</option>
-        <option value="fade">Fade</option>
-        <option value="slide-left">Slide left</option>
-        <option value="slide-right">Slide right</option>
-        <option value="slide-up">Slide up</option>
-        <option value="slide-down">Slide down</option>
-        <option value="zoom-in">Zoom in</option>
-        <option value="zoom-out">Zoom out</option>
-        <option value="blur">Blur</option>
-        <option value="rotate">Rotate</option>
-        <option value="flip-h">Flip horizontal</option>
-        <option value="flip-v">Flip vertical</option>
-        <option value="wipe-left">Wipe left</option>
-        <option value="dissolve">Dissolve</option>
-        <option value="push">Push</option>
-        <option value="fade-black">Fade to/from black</option>
-        <option value="morph">Morph</option>
-        <option value="shatter">Shatter</option>
-        <option value="static">TV static</option>
-        <option value="smash">Smash</option>
-        <option value="bounce">Bounce</option>
-      </select>
+      <label for="transitionPickerBtn">Transitions</label>
+      <button type="button" id="transitionPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
+        <span id="transitionPickerSummary">None — instant cut</span>
+        <span class="transition-picker-chevron" aria-hidden="true">▾</span>
+      </button>
     </div>
     <div class="field">
       <p class="field-group-title">QR code (Camera UI)</p>
@@ -1682,13 +1751,38 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     <div class="field">
       <button type="button" id="fullscreenBtn" class="menu-btn">Fullscreen</button>
     </div>
+    <div id="transitionOverlay" class="transition-overlay" hidden>
+      <div class="transition-sheet" role="dialog" aria-modal="true" aria-labelledby="transitionSheetTitle">
+        <div class="transition-sheet-head">
+          <h3 id="transitionSheetTitle">Transitions</h3>
+          <button type="button" id="transitionCloseBtn" class="transition-close-btn" aria-label="Close">×</button>
+        </div>
+        <div id="transitionPanel" class="transition-sheet-body" role="listbox"></div>
+      </div>
+    </div>
   </div>
   <script>
-    const RANDOM_TYPES = [
-      'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down',
-      'zoom-in', 'zoom-out', 'blur', 'rotate', 'flip-h', 'flip-v',
-      'wipe-left', 'dissolve', 'push', 'fade-black', 'morph', 'shatter',
-      'static', 'smash', 'bounce',
+    const TRANSITION_OPTIONS = [
+      { value: 'fade', label: 'Fade' },
+      { value: 'slide-left', label: 'Slide left' },
+      { value: 'slide-right', label: 'Slide right' },
+      { value: 'slide-up', label: 'Slide up' },
+      { value: 'slide-down', label: 'Slide down' },
+      { value: 'zoom-in', label: 'Zoom in' },
+      { value: 'zoom-out', label: 'Zoom out' },
+      { value: 'blur', label: 'Blur' },
+      { value: 'rotate', label: 'Rotate' },
+      { value: 'flip-h', label: 'Flip horizontal' },
+      { value: 'flip-v', label: 'Flip vertical' },
+      { value: 'wipe-left', label: 'Wipe left' },
+      { value: 'dissolve', label: 'Dissolve' },
+      { value: 'push', label: 'Push' },
+      { value: 'fade-black', label: 'Fade to/from black' },
+      { value: 'morph', label: 'Morph' },
+      { value: 'shatter', label: 'Shatter' },
+      { value: 'static', label: 'TV static' },
+      { value: 'smash', label: 'Smash' },
+      { value: 'bounce', label: 'Bounce' },
     ];
 
     const layerA = document.getElementById('layerA');
@@ -1698,7 +1792,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const menu = document.getElementById('menu');
     const displayTimeInput = document.getElementById('displayTime');
     const transitionSpeedInput = document.getElementById('transitionSpeed');
-    const transitionTypeSelect = document.getElementById('transitionType');
+    const transitionPickerBtn = document.getElementById('transitionPickerBtn');
+    const transitionOverlay = document.getElementById('transitionOverlay');
+    const transitionCloseBtn = document.getElementById('transitionCloseBtn');
+    const transitionPanel = document.getElementById('transitionPanel');
+    const transitionPickerSummary = document.getElementById('transitionPickerSummary');
     const displayTimeVal = document.getElementById('displayTimeVal');
     const transitionSpeedVal = document.getElementById('transitionSpeedVal');
     const fullscreenBtn = document.getElementById('fullscreenBtn');
@@ -1740,13 +1838,88 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return Math.round(Number(transitionSpeedInput.value) * 1000);
     }
 
-    function resolveTransitionType() {
-      const choice = transitionTypeSelect.value;
-      if (choice === 'random') {
-        return RANDOM_TYPES[Math.floor(Math.random() * RANDOM_TYPES.length)];
-      }
-      return choice;
+    const transitionSelectAll = document.createElement('input');
+    transitionSelectAll.type = 'checkbox';
+    transitionSelectAll.id = 'transitionSelectAll';
+
+    function getTransitionCheckboxes() {
+      return [...transitionPanel.querySelectorAll('.transition-option input[type="checkbox"]')];
     }
+
+    function syncSelectAllCheckbox() {
+      const boxes = getTransitionCheckboxes();
+      const all = boxes.length > 0 && boxes.every((b) => b.checked);
+      const some = boxes.some((b) => b.checked);
+      transitionSelectAll.indeterminate = some && !all;
+      transitionSelectAll.checked = all;
+    }
+
+    function getSelectedTransitions() {
+      return getTransitionCheckboxes().filter((el) => el.checked).map((el) => el.value);
+    }
+
+    function updateTransitionSummary() {
+      const selected = getSelectedTransitions();
+      if (!selected.length) {
+        transitionPickerSummary.textContent = 'None — instant cut';
+        return;
+      }
+      const labels = selected.map(
+        (v) => TRANSITION_OPTIONS.find((o) => o.value === v)?.label || v,
+      );
+      if (labels.length <= 2) {
+        transitionPickerSummary.textContent = labels.join(', ');
+      } else {
+        transitionPickerSummary.textContent = labels.slice(0, 2).join(', ') + ' +' + (labels.length - 2);
+      }
+    }
+
+    function setTransitionPanelOpen(open) {
+      transitionOverlay.hidden = !open;
+      transitionPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      menu.classList.toggle('menu-transition-open', open);
+      if (open) {
+        menu.classList.add('visible');
+        clearTimeout(menuHideTimer);
+      }
+    }
+
+    function resolveTransitionType() {
+      const selected = getSelectedTransitions();
+      if (!selected.length) return 'none';
+      return selected[Math.floor(Math.random() * selected.length)];
+    }
+
+    const selectAllRow = document.createElement('label');
+    selectAllRow.className = 'check-row transition-select-all';
+    selectAllRow.appendChild(transitionSelectAll);
+    selectAllRow.appendChild(document.createTextNode(' Select all'));
+    transitionSelectAll.addEventListener('change', () => {
+      const on = transitionSelectAll.checked;
+      getTransitionCheckboxes().forEach((cb) => { cb.checked = on; });
+      transitionSelectAll.indeterminate = false;
+      updateTransitionSummary();
+      applySettings();
+    });
+    transitionPanel.appendChild(selectAllRow);
+
+    for (const opt of TRANSITION_OPTIONS) {
+      const row = document.createElement('label');
+      row.className = 'check-row transition-option';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = opt.value;
+      cb.addEventListener('change', () => {
+        syncSelectAllCheckbox();
+        updateTransitionSummary();
+        applySettings();
+      });
+      row.appendChild(cb);
+      row.appendChild(document.createTextNode(' ' + opt.label));
+      transitionPanel.appendChild(row);
+    }
+    syncSelectAllCheckbox();
+    updateTransitionSummary();
 
     function applyTransitionTiming(out, inn, type, duration) {
       const ms = duration + 'ms';
@@ -1838,6 +2011,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     function showMenu() {
       menu.classList.add('visible');
       clearTimeout(menuHideTimer);
+      if (!transitionOverlay.hidden) return;
       menuHideTimer = setTimeout(() => menu.classList.remove('visible'), 5000);
     }
 
@@ -2123,7 +2297,25 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
     transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
-    transitionTypeSelect.addEventListener('change', () => { scheduleMenuHide(); applySettings(); });
+    transitionPickerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (transitionOverlay.hidden) setTransitionPanelOpen(true);
+    });
+    transitionCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTransitionPanelOpen(false);
+    });
+    transitionOverlay.addEventListener('click', (e) => {
+      if (e.target === transitionOverlay) setTransitionPanelOpen(false);
+    });
+    transitionOverlay.querySelector('.transition-sheet').addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    document.addEventListener('click', (e) => {
+      if (transitionOverlay.hidden) return;
+      if (menu.contains(e.target)) return;
+      setTransitionPanelOpen(false);
+    });
     fullscreenBtn.addEventListener('click', () => { void toggleFullscreen(); });
     qrShow.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrCorner.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
