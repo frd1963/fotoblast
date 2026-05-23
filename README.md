@@ -12,6 +12,10 @@ Self-contained Node.js web app for capturing photos in the browser, storing them
 | `GET` | `/watch` | **Server-Sent Events** — push stream of new uploads (add `?initial=0` to only receive future photos) |
 | `GET` | `/photos/:filename` | Download a single stored photo |
 | `GET` | `/receiver` | Browser page that connects to `/watch` and auto-downloads incoming photos |
+| `GET` | `/slideshow` | Full-screen photo slideshow |
+| `GET` | `/thumbnails` | Grid of photo thumbnails with checkboxes to include or exclude from the slideshow |
+| `GET` | `/thumbnails/photos` | JSON list of all photos with `included` flag for slideshow |
+| `PUT` | `/thumbnails/selection` | Save slideshow selection (`{ "excluded": ["filename.jpg", ...] }`) |
 | `GET` | `/health` | Health check and photo count |
 
 ## Run with Docker

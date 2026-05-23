@@ -65,6 +65,13 @@ function broadcastPhoto(meta) {
   }
 }
 
+function broadcastSlideshowSelection() {
+  const payload = 'event: slideshow-selection\ndata: {}\n\n';
+  for (const res of watchers) {
+    res.write(payload);
+  }
+}
+
 const app = express();
 app.use(express.json());
 
@@ -118,12 +125,51 @@ const upload = multer({
   },
 });
 
+const SLIDESHOW_EXCLUDED_FILE = path.join(REPO_DIR, '.slideshow-excluded.json');
+
 function listPhotos() {
   return fs
     .readdirSync(REPO_DIR, { withFileTypes: true })
     .filter((d) => d.isFile() && !d.name.startsWith('.'))
     .map((d) => d.name)
     .sort();
+}
+
+function readSlideshowExcluded() {
+  try {
+    const raw = fs.readFileSync(SLIDESHOW_EXCLUDED_FILE, 'utf8');
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return new Set();
+    const set = new Set();
+    for (const name of arr) {
+      if (typeof name === 'string' && safePhotoName(name)) set.add(name);
+    }
+    return set;
+  } catch (e) {
+    if (e.code === 'ENOENT') return new Set();
+    return new Set();
+  }
+}
+
+function writeSlideshowExcluded(excluded) {
+  const names = [...excluded]
+    .filter((n) => typeof n === 'string' && safePhotoName(n))
+    .sort();
+  fs.writeFileSync(SLIDESHOW_EXCLUDED_FILE, `${JSON.stringify(names, null, 2)}\n`, 'utf8');
+}
+
+function listSlideshowPhotos() {
+  const excluded = readSlideshowExcluded();
+  return listPhotos().filter((filename) => !excluded.has(filename));
+}
+
+function photoMeta(filename) {
+  const stat = fs.statSync(path.join(REPO_DIR, filename));
+  return {
+    filename,
+    url: `/photos/${encodeURIComponent(filename)}`,
+    mtime: stat.mtimeMs,
+  };
 }
 
 function parseSyncedCookie(req) {
@@ -287,15 +333,55 @@ app.get('/slideshow/qr.png', sendQrPng);
 
 app.get('/slideshow/photos', (_req, res) => {
   res.json({
-    photos: listPhotos().map((filename) => {
-      const stat = fs.statSync(path.join(REPO_DIR, filename));
-      return {
-        filename,
-        url: `/photos/${encodeURIComponent(filename)}`,
-        mtime: stat.mtimeMs,
-      };
-    }),
+    photos: listSlideshowPhotos().map((filename) => photoMeta(filename)),
   });
+});
+
+app.get('/thumbnails', (_req, res) => {
+  res.type('html').send(THUMBNAILS_HTML);
+});
+
+app.get('/thumbnails/photos', (_req, res) => {
+  const excluded = readSlideshowExcluded();
+  res.json({
+    photos: listPhotos().map((filename) => ({
+      ...photoMeta(filename),
+      included: !excluded.has(filename),
+    })),
+  });
+});
+
+app.put('/thumbnails/selection', (req, res) => {
+  const { excluded, included } = req.body || {};
+
+  if (excluded !== undefined) {
+    if (!Array.isArray(excluded)) {
+      return res.status(400).json({ error: 'excluded must be an array of filenames' });
+    }
+    const set = new Set();
+    for (const name of excluded) {
+      if (typeof name === 'string' && safePhotoName(name)) set.add(name);
+    }
+    writeSlideshowExcluded(set);
+    broadcastSlideshowSelection();
+    return res.json({ ok: true, excluded: [...set].sort() });
+  }
+
+  if (included !== undefined) {
+    if (!Array.isArray(included)) {
+      return res.status(400).json({ error: 'included must be an array of filenames' });
+    }
+    const includedSet = new Set();
+    for (const name of included) {
+      if (typeof name === 'string' && safePhotoName(name)) includedSet.add(name);
+    }
+    const excludedSet = new Set(listPhotos().filter((f) => !includedSet.has(f)));
+    writeSlideshowExcluded(excludedSet);
+    broadcastSlideshowSelection();
+    return res.json({ ok: true, excluded: [...excludedSet].sort() });
+  }
+
+  res.status(400).json({ error: 'Provide excluded or included array' });
 });
 
 app.get('/sync', (req, res) => {
@@ -1031,6 +1117,7 @@ const RECEIVER_HTML = `<!DOCTYPE html>
     <nav class="nav" aria-label="Pages">
       <a class="nav-link" href="/ui">Camera</a>
       <a class="nav-link is-active" href="/receiver" aria-current="page">Receiver</a>
+      <a class="nav-link" href="/thumbnails">Thumbnails</a>
       <a class="nav-link" href="/slideshow">Slideshow</a>
     </nav>
     <section class="card">
@@ -1292,6 +1379,406 @@ const RECEIVER_HTML = `<!DOCTYPE html>
     pickFolderBtn.addEventListener('click', chooseSaveFolder);
     clearFolderBtn.addEventListener('click', clearSaveFolder);
     loadSavedFolder();
+  </script>
+</body>
+</html>`;
+
+const THUMBNAILS_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Fotoblast Thumbnails</title>
+  ${FAVICON_LINK}
+  <script>
+    (function () {
+      var k = 'fotoblast-theme', t = localStorage.getItem(k);
+      if (t !== 'light' && t !== 'dark') {
+        t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    [data-theme="light"] {
+      color-scheme: light;
+      --bg: #f4f6fb;
+      --bg-accent: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(99, 102, 241, 0.12), transparent 55%);
+      --surface: #ffffff;
+      --surface-muted: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-text: #ffffff;
+      --secondary: #e2e8f0;
+      --secondary-text: #1e293b;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+      --nav-active: #eef2ff;
+      --nav-active-text: #4338ca;
+    }
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0b0f17;
+      --bg-accent: radial-gradient(ellipse 120% 80% at 50% -20%, rgba(99, 102, 241, 0.18), transparent 55%);
+      --surface: #151b26;
+      --surface-muted: #1e2736;
+      --border: #2a3544;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-text: #ffffff;
+      --secondary: #2a3544;
+      --secondary-text: #e2e8f0;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px rgba(0, 0, 0, 0.35);
+      --nav-active: #1e1b4b;
+      --nav-active-text: #a5b4fc;
+    }
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      line-height: 1.55;
+      color: var(--text);
+      background: var(--bg);
+      background-image: var(--bg-accent);
+    }
+    .app {
+      max-width: 56rem;
+      margin: 0 auto;
+      padding: 1rem 1.1rem 2rem;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+    .brand-mark { flex-shrink: 0; width: 2.25rem; height: 2.25rem; display: block; line-height: 0; }
+    .brand-logo { width: 100%; height: 100%; display: block; object-fit: contain; }
+    .brand h1 { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .theme-switch {
+      display: flex;
+      padding: 3px;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+    }
+    .theme-switch button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.35rem 0.55rem;
+      border-radius: 7px;
+      cursor: pointer;
+    }
+    .theme-switch button[aria-pressed="true"] {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+    .nav {
+      display: flex;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+      padding: 0.25rem;
+      border-radius: 12px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .nav-link {
+      flex: 1 1 auto;
+      min-width: 4.5rem;
+      text-align: center;
+      padding: 0.5rem 0.4rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: 9px;
+    }
+    .nav-link:hover { color: var(--text); }
+    .nav-link.is-active {
+      background: var(--nav-active);
+      color: var(--nav-active-text);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.1rem 1.15rem;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      margin: 0 0 0.5rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .btn {
+      padding: 0.5rem 0.85rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--accent-text);
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn.secondary { background: var(--secondary); color: var(--secondary-text); }
+    #status {
+      flex: 1 1 100%;
+      margin: 0;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    #status.err { color: #dc2626; }
+    #status.ok { color: var(--accent); }
+    .thumb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+      gap: 0.75rem;
+    }
+    .thumb-item {
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--surface-muted);
+      transition: border-color 0.15s, opacity 0.15s;
+    }
+    .thumb-item.is-off {
+      opacity: 0.55;
+      border-color: var(--border);
+    }
+    .thumb-item.is-on { border-color: var(--accent); }
+    .thumb-link {
+      display: block;
+      line-height: 0;
+      background: #000;
+    }
+    .thumb-link img {
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      display: block;
+    }
+    .thumb-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.4rem;
+      padding: 0.45rem 0.5rem;
+      font-size: 0.72rem;
+      cursor: pointer;
+      color: var(--text);
+    }
+    .thumb-check input { accent-color: var(--accent); margin-top: 0.1rem; flex-shrink: 0; }
+    .thumb-name {
+      word-break: break-all;
+      line-height: 1.25;
+      color: var(--text-muted);
+    }
+    #empty {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 2rem 1rem;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">${BRAND_LOGO_HTML}</span>
+        <h1>Thumbnails</h1>
+      </div>
+      <div class="theme-switch" role="group" aria-label="Theme">
+        <button type="button" data-theme-set="light">Light</button>
+        <button type="button" data-theme-set="dark">Dark</button>
+      </div>
+    </header>
+    <nav class="nav" aria-label="Pages">
+      <a class="nav-link" href="/ui">Camera</a>
+      <a class="nav-link" href="/receiver">Receiver</a>
+      <a class="nav-link is-active" href="/thumbnails" aria-current="page">Thumbnails</a>
+      <a class="nav-link" href="/slideshow">Slideshow</a>
+    </nav>
+    <section class="card">
+      <p class="card-title">Slideshow photos</p>
+      <p style="margin:0 0 0.75rem;color:var(--text-muted);font-size:0.9rem;">
+        Checked photos appear in the slideshow. New uploads are included by default.
+      </p>
+      <div class="toolbar">
+        <button type="button" class="btn secondary" id="selectAllBtn">Select all</button>
+        <button type="button" class="btn secondary" id="selectNoneBtn">Select none</button>
+        <p id="status">Loading…</p>
+      </div>
+      <div id="grid" class="thumb-grid" hidden></div>
+      <p id="empty" hidden>No photos uploaded yet.</p>
+    </section>
+  </div>
+  <script>
+    const grid = document.getElementById('grid');
+    const emptyEl = document.getElementById('empty');
+    const statusEl = document.getElementById('status');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const selectNoneBtn = document.getElementById('selectNoneBtn');
+
+    let photos = [];
+    let saveTimer = null;
+    let saving = false;
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      statusEl.className = kind || '';
+    }
+
+    function excludedFromPhotos() {
+      return photos.filter((p) => !p.included).map((p) => p.filename);
+    }
+
+    async function saveSelection() {
+      const excluded = excludedFromPhotos();
+      saving = true;
+      setStatus('Saving…', 'ok');
+      try {
+        const res = await fetch('/thumbnails/selection', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ excluded }),
+        });
+        if (!res.ok) throw new Error('Save failed');
+        setStatus(
+          photos.length - excluded.length + ' of ' + photos.length + ' in slideshow',
+          'ok',
+        );
+      } catch (_) {
+        setStatus('Could not save selection', 'err');
+      } finally {
+        saving = false;
+      }
+    }
+
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { void saveSelection(); }, 350);
+      const n = photos.filter((p) => p.included).length;
+      setStatus(n + ' of ' + photos.length + ' in slideshow (unsaved)', '');
+    }
+
+    function render() {
+      grid.innerHTML = '';
+      if (!photos.length) {
+        grid.hidden = true;
+        emptyEl.hidden = false;
+        setStatus('No photos', '');
+        return;
+      }
+      emptyEl.hidden = true;
+      grid.hidden = false;
+      for (const photo of photos) {
+        const item = document.createElement('div');
+        item.className = 'thumb-item ' + (photo.included ? 'is-on' : 'is-off');
+
+        const link = document.createElement('a');
+        link.className = 'thumb-link';
+        link.href = photo.url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = photo.url;
+        img.alt = photo.filename;
+        img.loading = 'lazy';
+        link.appendChild(img);
+
+        const label = document.createElement('label');
+        label.className = 'thumb-check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = photo.included;
+        cb.addEventListener('change', () => {
+          photo.included = cb.checked;
+          item.className = 'thumb-item ' + (photo.included ? 'is-on' : 'is-off');
+          scheduleSave();
+        });
+        const name = document.createElement('span');
+        name.className = 'thumb-name';
+        name.textContent = photo.filename;
+        label.appendChild(cb);
+        label.appendChild(name);
+
+        item.appendChild(link);
+        item.appendChild(label);
+        grid.appendChild(item);
+      }
+      if (!saving) {
+        const n = photos.filter((p) => p.included).length;
+        setStatus(n + ' of ' + photos.length + ' in slideshow', 'ok');
+      }
+    }
+
+    async function loadPhotos() {
+      try {
+        const res = await fetch('/thumbnails/photos');
+        const data = await res.json();
+        photos = data.photos || [];
+        render();
+      } catch (_) {
+        setStatus('Could not load photos', 'err');
+      }
+    }
+
+    selectAllBtn.addEventListener('click', () => {
+      photos.forEach((p) => { p.included = true; });
+      render();
+      scheduleSave();
+    });
+    selectNoneBtn.addEventListener('click', () => {
+      photos.forEach((p) => { p.included = false; });
+      render();
+      scheduleSave();
+    });
+
+    document.querySelectorAll('[data-theme-set]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const t = btn.getAttribute('data-theme-set');
+        localStorage.setItem('fotoblast-theme', t);
+        document.documentElement.setAttribute('data-theme', t);
+        document.querySelectorAll('[data-theme-set]').forEach((b) => {
+          b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === t ? 'true' : 'false');
+        });
+      });
+      btn.setAttribute(
+        'aria-pressed',
+        btn.getAttribute('data-theme-set') === document.documentElement.getAttribute('data-theme')
+          ? 'true'
+          : 'false',
+      );
+    });
+
+    const watch = new EventSource('/watch?initial=0');
+    watch.addEventListener('photo', () => { void loadPhotos(); });
+
+    void loadPhotos();
   </script>
 </body>
 </html>`;
@@ -2694,6 +3181,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     const watch = new EventSource('/watch?initial=0');
     watch.addEventListener('photo', () => { void loadPhotos(); });
+    watch.addEventListener('slideshow-selection', () => { void loadPhotos(); });
 
     updateLabels();
     updateFullscreenBtn();
