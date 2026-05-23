@@ -1312,6 +1312,22 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       background: #000;
       font-family: system-ui, -apple-system, sans-serif;
     }
+    html.slideshow-hide-cursor,
+    html.slideshow-hide-cursor *,
+    html.slideshow-hide-cursor:fullscreen,
+    html.slideshow-hide-cursor:fullscreen *,
+    html.slideshow-hide-cursor:-webkit-full-screen,
+    html.slideshow-hide-cursor:-webkit-full-screen * {
+      cursor: none !important;
+    }
+    #fsIdleShield {
+      position: fixed;
+      inset: 0;
+      z-index: 19;
+      cursor: none;
+      background: transparent;
+    }
+    #fsIdleShield[hidden] { display: none !important; }
     #stage {
       position: fixed;
       inset: 0;
@@ -1359,7 +1375,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       width: min(20rem, calc(100vw - 2rem));
       max-height: min(85vh, calc(100vh - 2rem));
       overflow-y: auto;
-      overflow-x: visible;
+      overflow-x: hidden;
       padding: 0.85rem 1rem;
       border-radius: 12px;
       background: rgba(15, 23, 42, 0.92);
@@ -1376,8 +1392,15 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       pointer-events: auto;
       transform: translateY(0);
     }
-    #menu h2 {
+    .menu-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
       margin: 0 0 0.65rem;
+    }
+    .menu-head h2 {
+      margin: 0;
       font-size: 0.85rem;
       font-weight: 600;
       letter-spacing: 0.04em;
@@ -1387,9 +1410,10 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     .field {
       margin-bottom: 0.65rem;
     }
-    #menu.menu-transition-open {
-      max-height: none;
-      overflow: visible;
+    #menu.menu-subpanel-open {
+      height: min(85vh, calc(100vh - 2rem));
+      max-height: min(85vh, calc(100vh - 2rem));
+      overflow: hidden;
     }
     .field:last-child { margin-bottom: 0; }
     .field label {
@@ -1481,6 +1505,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       display: flex;
       flex-direction: column;
       height: 100%;
+      max-height: 100%;
+      min-height: 0;
       background: #0f172a;
       border-radius: inherit;
       border: 1px solid #475569;
@@ -1515,8 +1541,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
     .transition-close-btn:hover { color: #f8fafc; background: #334155; }
     .transition-sheet-body {
+      flex: 1 1 auto;
+      min-height: 0;
       padding: 0.45rem 0.6rem 0.6rem;
-      overflow: visible;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .transition-select-all {
       margin-bottom: 0.35rem;
@@ -1535,6 +1564,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       font-size: 0.85rem;
     }
     .qr-options.disabled { opacity: 0.45; pointer-events: none; }
+    .qr-options label {
+      display: block;
+      font-size: 0.8rem;
+      margin: 0.5rem 0 0.25rem;
+      color: #cbd5e1;
+    }
+    .qr-options label:first-of-type { margin-top: 0.65rem; }
+    .transition-sheet-body > .check-row { margin-bottom: 0.15rem; }
     #qrOverlay {
       position: fixed;
       z-index: 18;
@@ -1738,6 +1775,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     <div id="staticOverlay" aria-hidden="true"></div>
   </div>
   <p id="empty">No photos uploaded yet.</p>
+  <div id="fsIdleShield" hidden aria-hidden="true"></div>
   <div id="qrOverlay" class="pos-bl size-medium" hidden>
     <div class="qr-card">
       <div class="qr-frame">
@@ -1747,14 +1785,16 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     </div>
   </div>
   <div id="menu" aria-label="Slideshow options">
-    <h2>Slideshow</h2>
-    <div class="field">
-      <label for="displayTime">Show each photo <span id="displayTimeVal">5s</span></label>
-      <input type="range" id="displayTime" min="1" max="30" step="1" value="5">
+    <div class="menu-head">
+      <h2>Slideshow</h2>
+      <button type="button" id="menuCloseBtn" class="transition-close-btn" aria-label="Close menu">×</button>
     </div>
     <div class="field">
-      <label for="transitionSpeed">Transition speed <span id="transitionSpeedVal">0.8s</span></label>
-      <input type="range" id="transitionSpeed" min="0.1" max="10" step="0.1" value="0.8">
+      <label for="settingsPickerBtn">Settings</label>
+      <button type="button" id="settingsPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
+        <span id="settingsPickerSummary">5s each · 0.8s transition</span>
+        <span class="transition-picker-chevron" aria-hidden="true">▾</span>
+      </button>
     </div>
     <div class="field">
       <label for="transitionPickerBtn">Transitions</label>
@@ -1764,41 +1804,73 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       </button>
     </div>
     <div class="field">
-      <p class="field-group-title">QR code (Camera UI)</p>
-      <label class="check-row">
-        <input type="checkbox" id="qrShow" checked>
-        Show QR code
-      </label>
-    </div>
-    <div class="field qr-options" id="qrOptions">
-      <label for="qrCorner">Corner</label>
-      <select id="qrCorner">
-        <option value="tl">Top left</option>
-        <option value="tr">Top right</option>
-        <option value="bl" selected>Bottom left</option>
-        <option value="br">Bottom right</option>
-      </select>
-      <label for="qrSize">Size</label>
-      <select id="qrSize">
-        <option value="small">Small</option>
-        <option value="medium" selected>Medium</option>
-        <option value="large">Large</option>
-      </select>
-      <label for="qrBrandImage">Brand image</label>
-      <select id="qrBrandImage">
-        <option value="none">None</option>
-        <option value="fotoblast" selected>FotoBlast icon</option>
-        <option value="custom">Custom image…</option>
-      </select>
-      <div class="qr-brand-custom hidden" id="qrBrandCustom">
-        <label for="qrBrandFile">Choose image file</label>
-        <input type="file" id="qrBrandFile" accept="image/png,image/jpeg,image/webp,image/gif,image/*">
-      </div>
-      <label for="qrBrand">Label</label>
-      <input type="text" id="qrBrand" placeholder="FotoBlast" maxlength="48" autocomplete="off">
+      <label for="qrPickerBtn">QR code</label>
+      <button type="button" id="qrPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
+        <span id="qrPickerSummary">On · bottom left</span>
+        <span class="transition-picker-chevron" aria-hidden="true">▾</span>
+      </button>
     </div>
     <div class="field">
       <button type="button" id="fullscreenBtn" class="menu-btn">Fullscreen</button>
+    </div>
+    <div id="settingsOverlay" class="transition-overlay" hidden>
+      <div class="transition-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsSheetTitle">
+        <div class="transition-sheet-head">
+          <h3 id="settingsSheetTitle">Settings</h3>
+          <button type="button" id="settingsCloseBtn" class="transition-close-btn" aria-label="Close">×</button>
+        </div>
+        <div class="transition-sheet-body">
+          <div class="field">
+            <label for="displayTime">Show each photo <span id="displayTimeVal">5s</span></label>
+            <input type="range" id="displayTime" min="1" max="30" step="1" value="5">
+          </div>
+          <div class="field">
+            <label for="transitionSpeed">Transition speed <span id="transitionSpeedVal">0.8s</span></label>
+            <input type="range" id="transitionSpeed" min="0.1" max="10" step="0.1" value="0.8">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="qrSettingsOverlay" class="transition-overlay" hidden>
+      <div class="transition-sheet" role="dialog" aria-modal="true" aria-labelledby="qrSheetTitle">
+        <div class="transition-sheet-head">
+          <h3 id="qrSheetTitle">QR code</h3>
+          <button type="button" id="qrCloseBtn" class="transition-close-btn" aria-label="Close">×</button>
+        </div>
+        <div class="transition-sheet-body">
+          <label class="check-row">
+            <input type="checkbox" id="qrShow" checked>
+            Show QR code
+          </label>
+          <div class="qr-options" id="qrOptions">
+            <label for="qrCorner">Corner</label>
+            <select id="qrCorner">
+              <option value="tl">Top left</option>
+              <option value="tr">Top right</option>
+              <option value="bl" selected>Bottom left</option>
+              <option value="br">Bottom right</option>
+            </select>
+            <label for="qrSize">Size</label>
+            <select id="qrSize">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+            <label for="qrBrandImage">Brand image</label>
+            <select id="qrBrandImage">
+              <option value="none">None</option>
+              <option value="fotoblast" selected>FotoBlast icon</option>
+              <option value="custom">Custom image…</option>
+            </select>
+            <div class="qr-brand-custom hidden" id="qrBrandCustom">
+              <label for="qrBrandFile">Choose image file</label>
+              <input type="file" id="qrBrandFile" accept="image/png,image/jpeg,image/webp,image/gif,image/*">
+            </div>
+            <label for="qrBrand">Label</label>
+            <input type="text" id="qrBrand" placeholder="FotoBlast" maxlength="48" autocomplete="off">
+          </div>
+        </div>
+      </div>
     </div>
     <div id="transitionOverlay" class="transition-overlay" hidden>
       <div class="transition-sheet" role="dialog" aria-modal="true" aria-labelledby="transitionSheetTitle">
@@ -1840,11 +1912,21 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const stage = document.getElementById('stage');
     const emptyEl = document.getElementById('empty');
     const menu = document.getElementById('menu');
+    const fsIdleShield = document.getElementById('fsIdleShield');
+    const menuCloseBtn = document.getElementById('menuCloseBtn');
     const displayTimeInput = document.getElementById('displayTime');
     const transitionSpeedInput = document.getElementById('transitionSpeed');
+    const settingsPickerBtn = document.getElementById('settingsPickerBtn');
+    const settingsPickerSummary = document.getElementById('settingsPickerSummary');
+    const settingsOverlay = document.getElementById('settingsOverlay');
+    const settingsCloseBtn = document.getElementById('settingsCloseBtn');
     const transitionPickerBtn = document.getElementById('transitionPickerBtn');
     const transitionOverlay = document.getElementById('transitionOverlay');
     const transitionCloseBtn = document.getElementById('transitionCloseBtn');
+    const qrPickerBtn = document.getElementById('qrPickerBtn');
+    const qrPickerSummary = document.getElementById('qrPickerSummary');
+    const qrSettingsOverlay = document.getElementById('qrSettingsOverlay');
+    const qrCloseBtn = document.getElementById('qrCloseBtn');
     const transitionPanel = document.getElementById('transitionPanel');
     const transitionPickerSummary = document.getElementById('transitionPickerSummary');
     const displayTimeVal = document.getElementById('displayTimeVal');
@@ -1924,14 +2006,65 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
     }
 
-    function setTransitionPanelOpen(open) {
-      transitionOverlay.hidden = !open;
-      transitionPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      menu.classList.toggle('menu-transition-open', open);
-      if (open) {
+    const QR_CORNER_LABELS = {
+      tl: 'top left',
+      tr: 'top right',
+      bl: 'bottom left',
+      br: 'bottom right',
+    };
+
+    function isSubpanelOpen() {
+      return !settingsOverlay.hidden || !qrSettingsOverlay.hidden || !transitionOverlay.hidden;
+    }
+
+    function syncSubpanelMenuState() {
+      menu.classList.toggle('menu-subpanel-open', isSubpanelOpen());
+      if (isSubpanelOpen()) {
         menu.classList.add('visible');
         clearTimeout(menuHideTimer);
       }
+      updateFullscreenPresentation();
+    }
+
+    function closeOtherSubpanels(except) {
+      if (except !== 'settings') {
+        settingsOverlay.hidden = true;
+        settingsPickerBtn.setAttribute('aria-expanded', 'false');
+      }
+      if (except !== 'qr') {
+        qrSettingsOverlay.hidden = true;
+        qrPickerBtn.setAttribute('aria-expanded', 'false');
+      }
+      if (except !== 'transition') {
+        transitionOverlay.hidden = true;
+        transitionPickerBtn.setAttribute('aria-expanded', 'false');
+      }
+      syncSubpanelMenuState();
+    }
+
+    function setSettingsPanelOpen(open) {
+      if (open) closeOtherSubpanels('settings');
+      settingsOverlay.hidden = !open;
+      settingsPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      syncSubpanelMenuState();
+    }
+
+    function setQrPanelOpen(open) {
+      if (open) closeOtherSubpanels('qr');
+      qrSettingsOverlay.hidden = !open;
+      qrPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      syncSubpanelMenuState();
+    }
+
+    function setTransitionPanelOpen(open) {
+      if (open) closeOtherSubpanels('transition');
+      transitionOverlay.hidden = !open;
+      transitionPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      syncSubpanelMenuState();
+    }
+
+    function closeAllSubpanels() {
+      closeOtherSubpanels(null);
     }
 
     function resolveTransitionType() {
@@ -2039,9 +2172,25 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       scheduleHold();
     }
 
+    function updateSettingsPickerSummary() {
+      settingsPickerSummary.textContent =
+        displayTimeInput.value + 's each · ' + Number(transitionSpeedInput.value).toFixed(1) + 's transition';
+    }
+
+    function updateQrPickerSummary() {
+      if (!qrShow.checked) {
+        qrPickerSummary.textContent = 'Hidden';
+        return;
+      }
+      const corner = QR_CORNER_LABELS[qrCorner.value] || qrCorner.value;
+      qrPickerSummary.textContent = 'On · ' + corner;
+    }
+
     function updateLabels() {
       displayTimeVal.textContent = displayTimeInput.value + 's';
       transitionSpeedVal.textContent = Number(transitionSpeedInput.value).toFixed(1) + 's';
+      updateSettingsPickerSummary();
+      updateQrPickerSummary();
     }
 
     function clearTimers() {
@@ -2103,15 +2252,37 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       });
     }
 
+    function isMenuVisible() {
+      return menu.classList.contains('visible');
+    }
+
     function showMenu() {
       menu.classList.add('visible');
       clearTimeout(menuHideTimer);
-      if (!transitionOverlay.hidden) return;
-      menuHideTimer = setTimeout(() => menu.classList.remove('visible'), 5000);
+      if (isSubpanelOpen()) return;
+      menuHideTimer = setTimeout(hideMenu, 5000);
+      updateFullscreenPresentation();
+    }
+
+    function hideMenu() {
+      menu.classList.remove('visible');
+      clearTimeout(menuHideTimer);
+      menuHideTimer = null;
+      updateFullscreenPresentation();
+    }
+
+    function closeMenu() {
+      closeAllSubpanels();
+      hideMenu();
     }
 
     function scheduleMenuHide() {
       showMenu();
+    }
+
+    function dismissMenuIfOutside(target) {
+      if (menu.contains(target)) return;
+      closeMenu();
     }
 
     function getQrBrandLabel() {
@@ -2238,6 +2409,44 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return !!(el.requestFullscreen || el.webkitRequestFullscreen);
     }
 
+    let wakeLock = null;
+
+    function shouldHideCursorInFullscreen() {
+      return isFullscreen() && !isMenuVisible() && !isSubpanelOpen();
+    }
+
+    async function acquireWakeLock() {
+      if (!isFullscreen() || !('wakeLock' in navigator)) return;
+      try {
+        if (wakeLock) return;
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      } catch (_) {
+        wakeLock = null;
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (!wakeLock) return;
+      try {
+        await wakeLock.release();
+      } catch (_) {}
+      wakeLock = null;
+    }
+
+    function updateFullscreenPresentation() {
+      const hideCursor = shouldHideCursorInFullscreen();
+      document.documentElement.classList.toggle('slideshow-hide-cursor', hideCursor);
+      fsIdleShield.hidden = !hideCursor;
+      fsIdleShield.setAttribute('aria-hidden', hideCursor ? 'false' : 'true');
+      if (isFullscreen()) void acquireWakeLock();
+      else void releaseWakeLock();
+    }
+
+    function onFullscreenPointerWake() {
+      scheduleMenuHide();
+    }
+
     function updateFullscreenBtn() {
       if (!fullscreenSupported()) {
         fullscreenBtn.disabled = true;
@@ -2246,6 +2455,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
       fullscreenBtn.disabled = false;
       fullscreenBtn.textContent = isFullscreen() ? 'Exit fullscreen' : 'Fullscreen';
+    }
+
+    function onFullscreenChange() {
+      updateFullscreenBtn();
+      updateFullscreenPresentation();
     }
 
     async function toggleFullscreen() {
@@ -2261,7 +2475,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
         }
       } catch (_) {}
-      updateFullscreenBtn();
+      onFullscreenChange();
     }
 
     function setPhotoList(list) {
@@ -2416,30 +2630,38 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       setPhotoList(data.photos || []);
     }
 
-    displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
-    transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); applySettings(); });
-    transitionPickerBtn.addEventListener('click', (e) => {
+    function wireSubpanel(overlay, openBtn, closeBtn, setOpen) {
+      openBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (overlay.hidden) setOpen(true);
+      });
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setOpen(false);
+      });
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) setOpen(false);
+      });
+      overlay.querySelector('.transition-sheet').addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    }
+
+    displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
+    transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
+    menuCloseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (transitionOverlay.hidden) setTransitionPanelOpen(true);
+      closeMenu();
     });
-    transitionCloseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      setTransitionPanelOpen(false);
-    });
-    transitionOverlay.addEventListener('click', (e) => {
-      if (e.target === transitionOverlay) setTransitionPanelOpen(false);
-    });
-    transitionOverlay.querySelector('.transition-sheet').addEventListener('click', (e) => {
-      e.stopPropagation();
-    });
+    wireSubpanel(settingsOverlay, settingsPickerBtn, settingsCloseBtn, setSettingsPanelOpen);
+    wireSubpanel(qrSettingsOverlay, qrPickerBtn, qrCloseBtn, setQrPanelOpen);
+    wireSubpanel(transitionOverlay, transitionPickerBtn, transitionCloseBtn, setTransitionPanelOpen);
     document.addEventListener('click', (e) => {
-      if (transitionOverlay.hidden) return;
-      if (menu.contains(e.target)) return;
-      setTransitionPanelOpen(false);
+      if (isMenuVisible() || isSubpanelOpen()) dismissMenuIfOutside(e.target);
     });
     fullscreenBtn.addEventListener('click', () => { void toggleFullscreen(); });
-    qrShow.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
-    qrCorner.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrShow.addEventListener('change', () => { scheduleMenuHide(); updateQrPickerSummary(); void updateQrOverlay(); });
+    qrCorner.addEventListener('change', () => { scheduleMenuHide(); updateQrPickerSummary(); void updateQrOverlay(); });
     qrSize.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrandImage.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrand.addEventListener('input', () => { scheduleMenuHide(); void updateQrOverlay(); });
@@ -2455,12 +2677,20 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       syncQrBrandFields();
       void updateQrOverlay();
     });
-    document.addEventListener('fullscreenchange', updateFullscreenBtn);
-    document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && isFullscreen()) void acquireWakeLock();
+    });
     menu.addEventListener('input', scheduleMenuHide);
     menu.addEventListener('click', scheduleMenuHide);
     menu.addEventListener('focusin', scheduleMenuHide);
-    document.addEventListener('mousemove', scheduleMenuHide);
+    fsIdleShield.addEventListener('mousemove', onFullscreenPointerWake);
+    fsIdleShield.addEventListener('mousedown', onFullscreenPointerWake);
+    document.addEventListener('mousemove', () => {
+      if (isFullscreen() && shouldHideCursorInFullscreen()) return;
+      scheduleMenuHide();
+    });
 
     const watch = new EventSource('/watch?initial=0');
     watch.addEventListener('photo', () => { void loadPhotos(); });
