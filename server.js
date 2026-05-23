@@ -2225,13 +2225,16 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     .layer.from.bounce.animate { opacity: 0; transform: scale(0.88); }
     .layer.to.bounce { opacity: 0; transform: scale(0.25); }
     .layer.to.bounce.animate { opacity: 1; transform: scale(1); transition-timing-function: cubic-bezier(0.34, 1.45, 0.64, 1); }
+    .layer.tuner-glitch {
+      transform-origin: center center;
+      will-change: transform, filter, opacity, clip-path;
+    }
     #staticOverlay {
       position: absolute;
       inset: 0;
       z-index: 15;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.1s ease;
       background: #000;
       overflow: hidden;
     }
@@ -2245,7 +2248,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
       animation: static-jitter 0.12s steps(5) infinite;
     }
-    #stage.static-on #staticOverlay { opacity: 1; }
+    #stage.static-on #staticOverlay {
+      opacity: var(--static-noise, 0.92);
+    }
     @keyframes static-jitter {
       0% { transform: translate(0, 0); }
       25% { transform: translate(-3%, 2%); }
@@ -2390,6 +2395,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       { value: 'morph', label: 'Morph' },
       { value: 'shatter', label: 'Shatter' },
       { value: 'static', label: 'TV static' },
+      { value: 'tuner', label: 'TV Tuner' },
       { value: 'smash', label: 'Smash' },
       { value: 'bounce', label: 'Bounce' },
     ];
@@ -2681,6 +2687,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function clearTimers() {
+      cancelTvTunerRaf();
       clearTimeout(holdTimer);
       clearTimeout(transitionTimer);
       holdTimer = null;
@@ -2706,6 +2713,155 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       clearEffectRun(el);
       el.style.filter = '';
       el.style.opacity = '';
+      el.style.clipPath = '';
+    }
+
+    let tunerRaf = null;
+
+    function cancelTvTunerRaf() {
+      if (tunerRaf != null) {
+        cancelAnimationFrame(tunerRaf);
+        tunerRaf = null;
+      }
+    }
+
+    function clearTvTunerGlitch(el) {
+      if (!el) return;
+      el.style.transform = '';
+      el.style.filter = '';
+      el.style.opacity = '';
+      el.style.clipPath = '';
+    }
+
+    function applyTvTunerGlitch(el, intensity, tick, phaseSeed) {
+      if (intensity <= 0.001) {
+        clearTvTunerGlitch(el);
+        return;
+      }
+      const freq = 4 + intensity * 32;
+      const phase = phaseSeed * 0.0012 * freq + tick * 0.22;
+      const flicker = Math.sin(phase) * intensity;
+      const flicker2 = Math.sin(phase * 2.37 + 1.4) * intensity * 0.65;
+      const jx = (Math.random() - 0.5) * 18 * intensity;
+      const jy = (Math.random() - 0.5) * 4 * intensity;
+      const scaleY = Math.max(0.08, 1 - 0.52 * intensity + flicker * 0.07 + flicker2 * 0.05);
+      const scaleX = 1 + 0.14 * intensity + Math.abs(flicker) * 0.09;
+      const skew = (Math.random() - 0.5) * 12 * intensity;
+      let clip = '';
+      if (Math.random() < 0.28 * intensity) {
+        const mid = Math.random() * 0.34 + 0.33;
+        const thick = (Math.random() * 0.05 + 0.01) * intensity;
+        const top = Math.max(0, (mid - thick / 2) * 100);
+        const bot = Math.max(0, (1 - mid - thick / 2) * 100);
+        clip = 'inset(' + top + '% 0 ' + bot + '% 0)';
+      }
+      el.style.transform =
+        'translate3d(' + jx + 'px,' + jy + 'px,0) scaleX(' + scaleX + ') scaleY(' + scaleY + ') skewX(' + skew + 'deg)';
+      el.style.filter =
+        'brightness(' + (1 + (flicker + flicker2) * 0.22) + ') contrast(' + (1 + intensity * 0.55) + ')';
+      el.style.opacity = String(
+        Math.min(1, 0.72 + 0.28 * (1 - intensity * 0.35) + Math.random() * 0.22 * intensity),
+      );
+      el.style.clipPath = clip;
+    }
+
+    function tvTunerLogRamp(p) {
+      if (p <= 0) return 0;
+      if (p >= 1) return 1;
+      return Math.log(1 + p * (Math.E - 1));
+    }
+
+    function runTvTunerTransition(out, inn, duration, nextIndex) {
+      cancelTvTunerRaf();
+      const t1 = duration * 0.05;
+      const t2 = duration * 0.45;
+      const t3 = duration * 0.55;
+      const t4 = duration * 0.95;
+
+      out.className = 'layer from tuner-glitch';
+      inn.className = 'layer to tuner-glitch off';
+      clearTvTunerGlitch(out);
+      clearTvTunerGlitch(inn);
+      stage.classList.remove('static-on');
+      stage.style.removeProperty('--static-noise');
+
+      const start = performance.now();
+      let tick = 0;
+
+      return new Promise((resolve) => {
+        function frame(now) {
+          const elapsed = now - start;
+          tick += 1;
+
+          if (elapsed >= duration) {
+            cancelTvTunerRaf();
+            stage.classList.remove('static-on');
+            stage.style.removeProperty('--static-noise');
+            clearTvTunerGlitch(out);
+            clearTvTunerGlitch(inn);
+            finishSwap(out, inn, nextIndex);
+            resolve();
+            return;
+          }
+
+          let showOut = false;
+          let showIn = false;
+          let outIntensity = 0;
+          let inIntensity = 0;
+          let noise = 0;
+
+          if (elapsed < t1) {
+            showOut = true;
+            outIntensity = 0;
+          } else if (elapsed < t2) {
+            const ramp = tvTunerLogRamp((elapsed - t1) / (t2 - t1));
+            showOut = true;
+            outIntensity = ramp;
+            noise = ramp * 0.4;
+          } else if (elapsed < t3) {
+            showOut = true;
+            showIn = true;
+            outIntensity = 1;
+            inIntensity = 1;
+            noise = 0.5;
+          } else if (elapsed < t4) {
+            const ramp = tvTunerLogRamp((elapsed - t3) / (t4 - t3));
+            showIn = true;
+            inIntensity = 1 - ramp;
+            noise = (1 - ramp) * 0.5;
+          } else {
+            showIn = true;
+            inIntensity = 0;
+          }
+
+          if (showOut) {
+            out.classList.remove('off');
+            applyTvTunerGlitch(out, outIntensity, tick, elapsed);
+          } else {
+            out.classList.add('off');
+            clearTvTunerGlitch(out);
+          }
+
+          if (showIn) {
+            inn.classList.remove('off');
+            applyTvTunerGlitch(inn, inIntensity, tick, elapsed + 4096);
+          } else {
+            inn.classList.add('off');
+            clearTvTunerGlitch(inn);
+          }
+
+          if (noise > 0.04) {
+            stage.classList.add('static-on');
+            stage.style.setProperty('--static-noise', String(noise));
+          } else {
+            stage.classList.remove('static-on');
+            stage.style.removeProperty('--static-noise');
+          }
+
+          tunerRaf = requestAnimationFrame(frame);
+        }
+        tunerRaf = requestAnimationFrame(frame);
+      });
     }
 
     function resetLayer(el, off) {
@@ -3060,6 +3216,13 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           finishSwap(out, inn, nextIndex);
           await waitMs(Math.round(duration * 0.5));
           stage.classList.remove('static-on');
+          stage.style.removeProperty('--static-noise');
+          return;
+        }
+
+        if (type === 'tuner') {
+          await waitForLayerPaint(inn);
+          await runTvTunerTransition(out, inn, duration, nextIndex);
           return;
         }
 
