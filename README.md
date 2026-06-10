@@ -12,7 +12,7 @@ Self-contained Node.js web app for capturing photos in the browser, storing them
 | `GET` | `/watch` | **Server-Sent Events** — push stream of new uploads (add `?initial=0` to only receive future photos) |
 | `GET` | `/photos/:filename` | Download a single stored photo |
 | `GET` | `/receiver` | Browser page that connects to `/watch` and auto-downloads incoming photos |
-| `GET` | `/slideshow` | Full-screen photo slideshow |
+| `GET` | `/slideshow` | Full-screen photo slideshow (supports query params below) |
 | `GET` | `/thumbnails` | Grid of photo thumbnails with checkboxes to include or exclude from the slideshow |
 | `GET` | `/thumbnails/photos` | JSON list of all photos with `included` flag for slideshow |
 | `PUT` | `/thumbnails/selection` | Save slideshow selection (`{ "excluded": ["filename.jpg", ...] }`) |
@@ -54,6 +54,30 @@ es.addEventListener('photo', (e) => {
   const { filename, url } = JSON.parse(e.data);
   // fetch(url) and save filename...
 });
+```
+
+## Slideshow query parameters
+
+Open `/slideshow` with optional settings in the URL. Omitted params keep the page defaults.
+
+| Parameter | Aliases | Values | Default |
+|-----------|---------|--------|---------|
+| `display` | `displayTime` | `1`–`30` (seconds per photo) | `5` |
+| `transitionSpeed` | `speed` | `0.1`–`10` (seconds) | `0.8` |
+| `transitions` | — | Comma-separated transition ids, `all`, or `none` | none selected (instant cut) |
+| `qr` | `qrShow` | `1`/`0`, `true`/`false`, `on`/`off` | `true` |
+| `qrCorner` | — | `tl`, `tr`, `bl`, `br` | `bl` |
+| `qrSize` | — | `small`, `medium`, `large` | `medium` |
+| `qrBrandImage` | — | `none`, `fotoblast`, `custom` | `fotoblast` |
+| `qrBrand` | `qrLabel` | Text, max 48 chars | `FotoBlast` |
+| `fullscreen` | — | `1`/`0`, `true`/`false` | `false` (if blocked, a hint appears after 5s or on click) |
+
+Transition ids include: `fade`, `slide-left`, `slide-right`, `slide-up`, `slide-down`, `zoom-in`, `zoom-out`, `blur`, `scan`, `rotate`, `flip-h`, `flip-v`, `wipe-left`, `dissolve`, `push`, `fade-black`, `morph`, `shatter`, `static`, `tuner`, `smash`, `bounce`.
+
+Example:
+
+```text
+/slideshow?display=8&speed=1.2&transitions=fade,blur,tuner&qr=1&qrCorner=br&qrSize=large&qrBrand=Scan%20to%20share
 ```
 
 ## Sync behavior

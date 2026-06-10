@@ -8,6 +8,9 @@ const crypto = require('crypto');
 const PORT = Number(process.env.PORT) || 3000;
 const REPO_DIR = process.env.REPO_DIR || path.join(__dirname, 'repo');
 const ICONS_DIR = path.join(__dirname, 'icons');
+const VIRTUAL_PATH = normalizeVirtualPath(process.env.VIRTUAL_PATH || '');
+const MAX_UPLOAD_MB = Math.max(1, Number(process.env.MAX_UPLOAD_MB) || 25);
+const MAX_UPLOAD_BYTES = Math.floor(MAX_UPLOAD_MB * 1024 * 1024);
 let QRCodeLib;
 try {
   QRCodeLib = require('qrcode');
@@ -16,6 +19,20 @@ try {
 }
 const SYNC_COOKIE = 'synced_photos';
 const COOKIE_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+
+function normalizeVirtualPath(raw) {
+  const str = String(raw || '').trim();
+  if (!str) return '';
+  const segments = str.split('/').filter(Boolean);
+  return segments.length ? `/${segments.join('/')}` : '';
+}
+
+function prefixedPath(p) {
+  const route = p && p.startsWith('/') ? p : `/${p || ''}`;
+  if (!VIRTUAL_PATH) return route;
+  if (route === '/') return `${VIRTUAL_PATH}/`;
+  return `${VIRTUAL_PATH}${route}`;
+}
 
 const ICON_PUBLIC_NAMES = [
   'favicon.ico',
@@ -76,11 +93,11 @@ const app = express();
 app.use(express.json());
 
 for (const name of ICON_PUBLIC_NAMES) {
-  app.get(`/${name}`, (_req, res) => sendIcon(res, name));
+  app.get(prefixedPath(`/${name}`), (_req, res) => sendIcon(res, name));
 }
 
 app.use(
-  '/icons',
+  prefixedPath('/icons'),
   express.static(ICONS_DIR, {
     maxAge: '7d',
     immutable: true,
@@ -88,14 +105,14 @@ app.use(
   }),
 );
 
-app.get('/site.webmanifest', (_req, res) => {
+app.get(prefixedPath('/site.webmanifest'), (_req, res) => {
   res.type('application/manifest+json');
   res.json({
     name: 'Fotoblast',
     short_name: 'Fotoblast',
     icons: [
-      { src: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/android-chrome-512x512.png', sizes: '512x512', type: 'image/png' },
+      { src: prefixedPath('/android-chrome-192x192.png'), sizes: '192x192', type: 'image/png' },
+      { src: prefixedPath('/android-chrome-512x512.png'), sizes: '512x512', type: 'image/png' },
     ],
     theme_color: '#4f46e5',
     background_color: '#ffffff',
@@ -115,7 +132,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype && file.mimetype.startsWith('image/')) {
       cb(null, true);
@@ -167,7 +184,7 @@ function photoMeta(filename) {
   const stat = fs.statSync(path.join(REPO_DIR, filename));
   return {
     filename,
-    url: `/photos/${encodeURIComponent(filename)}`,
+    url: prefixedPath(`/photos/${encodeURIComponent(filename)}`),
     mtime: stat.mtimeMs,
   };
 }
@@ -189,7 +206,7 @@ function parseSyncedCookie(req) {
 }
 
 function syncedCookieValue(names) {
-  return `${SYNC_COOKIE}=${encodeURIComponent(JSON.stringify([...names]))}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(COOKIE_MAX_AGE_MS / 1000)}`;
+  return `${SYNC_COOKIE}=${encodeURIComponent(JSON.stringify([...names]))}; Path=${prefixedPath('/')}; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(COOKIE_MAX_AGE_MS / 1000)}`;
 }
 
 function slideshowDefaultPort(proto) {
@@ -219,13 +236,15 @@ function slideshowRequestOrigin(req) {
 
 function slideshowCameraUiUrl(req, override) {
   const portHint = typeof req.query.port === 'string' ? req.query.port : '';
+  const expectedUiPath = prefixedPath('/ui');
 
   if (override) {
     try {
       const u = new URL(override);
-      if (u.pathname === '/ui' || u.pathname === '/ui/') {
+      const normalized = u.pathname.replace(/\/+$/, '') || '/';
+      if (normalized === expectedUiPath) {
         const host = u.port ? u.host : hostWithPort(u.hostname, u.port || portHint, u.protocol);
-        return `${u.protocol}//${host}/ui`;
+        return `${u.protocol}//${host}${expectedUiPath}`;
       }
     } catch {
       /* use request origin */
@@ -233,17 +252,17 @@ function slideshowCameraUiUrl(req, override) {
   }
 
   const origin = slideshowRequestOrigin(req);
-  return origin ? `${origin}/ui` : '/ui';
+  return origin ? `${origin}${expectedUiPath}` : expectedUiPath;
 }
 
-app.post('/upload', upload.single('photo'), (req, res) => {
+app.post(prefixedPath('/upload'), upload.single('photo'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Missing photo field (multipart form field name: photo)' });
   }
   const meta = {
     filename: req.file.filename,
     size: req.file.size,
-    url: `/photos/${encodeURIComponent(req.file.filename)}`,
+    url: prefixedPath(`/photos/${encodeURIComponent(req.file.filename)}`),
   };
   broadcastPhoto(meta);
   res.status(201).json({ ok: true, ...meta });
@@ -251,6 +270,9 @@ app.post('/upload', upload.single('photo'), (req, res) => {
 
 app.use((err, _req, res, next) => {
   if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: `Photo too large. Max upload is ${MAX_UPLOAD_MB}MB.` });
+    }
     return res.status(400).json({ error: err.message });
   }
   if (err) {
@@ -259,13 +281,13 @@ app.use((err, _req, res, next) => {
   next();
 });
 
-app.get('/photos/:filename', (req, res) => {
+app.get(prefixedPath('/photos/:filename'), (req, res) => {
   const name = safePhotoName(req.params.filename);
   if (!name) return res.status(404).json({ error: 'Photo not found' });
   res.download(path.join(REPO_DIR, name), name);
 });
 
-app.get('/watch', (req, res) => {
+app.get(prefixedPath('/watch'), (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -281,7 +303,7 @@ app.get('/watch', (req, res) => {
       const meta = {
         filename,
         size: stat.size,
-        url: `/photos/${encodeURIComponent(filename)}`,
+        url: prefixedPath(`/photos/${encodeURIComponent(filename)}`),
       };
       res.write(`event: photo\ndata: ${JSON.stringify(meta)}\n\n`);
     }
@@ -290,15 +312,15 @@ app.get('/watch', (req, res) => {
   req.on('close', () => watchers.delete(res));
 });
 
-app.get('/ui', (_req, res) => {
+app.get(prefixedPath('/ui'), (_req, res) => {
   res.type('html').send(UI_HTML);
 });
 
-app.get('/receiver', (_req, res) => {
+app.get(prefixedPath('/receiver'), (_req, res) => {
   res.type('html').send(RECEIVER_HTML);
 });
 
-app.get('/slideshow', (_req, res) => {
+app.get(prefixedPath('/slideshow'), (_req, res) => {
   res.type('html').send(SLIDESHOW_HTML);
 });
 
@@ -327,21 +349,21 @@ async function sendQrPng(req, res) {
   }
 }
 
-app.get('/qr', sendQrPng);
-app.get('/qr.png', sendQrPng);
-app.get('/slideshow/qr.png', sendQrPng);
+app.get(prefixedPath('/qr'), sendQrPng);
+app.get(prefixedPath('/qr.png'), sendQrPng);
+app.get(prefixedPath('/slideshow/qr.png'), sendQrPng);
 
-app.get('/slideshow/photos', (_req, res) => {
+app.get(prefixedPath('/slideshow/photos'), (_req, res) => {
   res.json({
     photos: listSlideshowPhotos().map((filename) => photoMeta(filename)),
   });
 });
 
-app.get('/thumbnails', (_req, res) => {
+app.get(prefixedPath('/thumbnails'), (_req, res) => {
   res.type('html').send(THUMBNAILS_HTML);
 });
 
-app.get('/thumbnails/photos', (_req, res) => {
+app.get(prefixedPath('/thumbnails/photos'), (_req, res) => {
   const excluded = readSlideshowExcluded();
   res.json({
     photos: listPhotos().map((filename) => ({
@@ -351,7 +373,7 @@ app.get('/thumbnails/photos', (_req, res) => {
   });
 });
 
-app.put('/thumbnails/selection', (req, res) => {
+app.put(prefixedPath('/thumbnails/selection'), (req, res) => {
   const { excluded, included } = req.body || {};
 
   if (excluded !== undefined) {
@@ -384,7 +406,7 @@ app.put('/thumbnails/selection', (req, res) => {
   res.status(400).json({ error: 'Provide excluded or included array' });
 });
 
-app.get('/sync', (req, res) => {
+app.get(prefixedPath('/sync'), (req, res) => {
   const synced = parseSyncedCookie(req);
   const all = listPhotos();
   const pending = all.filter((name) => !synced.has(name));
@@ -416,9 +438,14 @@ app.get('/sync', (req, res) => {
   archive.finalize();
 });
 
-app.get('/', (_req, res) => res.redirect('/ui'));
+app.get('/', (_req, res) => {
+  return res.redirect(prefixedPath('/ui'));
+});
+if (VIRTUAL_PATH) {
+  app.get(prefixedPath('/'), (_req, res) => res.redirect(prefixedPath('/ui')));
+}
 
-app.get('/health', (_req, res) => {
+app.get(prefixedPath('/health'), (_req, res) => {
   res.json({ ok: true, photos: listPhotos().length });
 });
 
@@ -432,18 +459,20 @@ heartbeat.unref();
 
 app.listen(PORT, () => {
   console.log(`Fotoblast listening on http://0.0.0.0:${PORT}`);
+  if (VIRTUAL_PATH) console.log(`Virtual path: ${VIRTUAL_PATH}`);
+  console.log(`Max upload: ${MAX_UPLOAD_MB}MB`);
   console.log(`Repo directory: ${REPO_DIR}`);
 });
 
-const FAVICON_LINK = `<link rel="icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
-  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="manifest" href="/site.webmanifest">`;
+const FAVICON_LINK = `<link rel="icon" href="${prefixedPath('/favicon.ico')}" type="image/x-icon">
+  <link rel="icon" type="image/png" sizes="16x16" href="${prefixedPath('/favicon-16x16.png')}">
+  <link rel="icon" type="image/png" sizes="32x32" href="${prefixedPath('/favicon-32x32.png')}">
+  <link rel="icon" type="image/png" sizes="48x48" href="${prefixedPath('/favicon-48x48.png')}">
+  <link rel="icon" type="image/png" sizes="96x96" href="${prefixedPath('/favicon-96x96.png')}">
+  <link rel="apple-touch-icon" href="${prefixedPath('/apple-touch-icon.png')}">
+  <link rel="manifest" href="${prefixedPath('/site.webmanifest')}">`;
 const BRAND_LOGO_HTML =
-  '<img class="brand-logo" src="/favicon-96x96.png" width="36" height="36" alt="">';
+  `<img class="brand-logo" src="${prefixedPath('/favicon-96x96.png')}" width="36" height="36" alt="">`;
 
 const UI_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -788,7 +817,7 @@ const UI_HTML = `<!DOCTYPE html>
     async function uploadFile(file) {
       const fd = new FormData();
       fd.append('photo', file, file.name || 'photo.jpg');
-      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const res = await fetch('${prefixedPath('/upload')}', { method: 'POST', body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || res.statusText || 'Upload failed');
       return data;
@@ -1115,10 +1144,10 @@ const RECEIVER_HTML = `<!DOCTYPE html>
       </div>
     </header>
     <nav class="nav" aria-label="Pages">
-      <a class="nav-link" href="/ui">Camera</a>
-      <a class="nav-link is-active" href="/receiver" aria-current="page">Receiver</a>
-      <a class="nav-link" href="/thumbnails">Thumbnails</a>
-      <a class="nav-link" href="/slideshow">Slideshow</a>
+      <a class="nav-link" href="${prefixedPath('/ui')}">Camera</a>
+      <a class="nav-link is-active" href="${prefixedPath('/receiver')}" aria-current="page">Receiver</a>
+      <a class="nav-link" href="${prefixedPath('/thumbnails')}">Thumbnails</a>
+      <a class="nav-link" href="${prefixedPath('/slideshow')}">Slideshow</a>
     </nav>
     <section class="card">
       <p class="card-title">Connection</p>
@@ -1355,7 +1384,7 @@ const RECEIVER_HTML = `<!DOCTYPE html>
       }
     }
 
-    const es = new EventSource('/watch?initial=1');
+    const es = new EventSource('${prefixedPath('/watch')}?initial=1');
 
     es.addEventListener('open', () => {
       state.textContent = 'Connected — waiting for uploads';
@@ -1617,10 +1646,10 @@ const THUMBNAILS_HTML = `<!DOCTYPE html>
       </div>
     </header>
     <nav class="nav" aria-label="Pages">
-      <a class="nav-link" href="/ui">Camera</a>
-      <a class="nav-link" href="/receiver">Receiver</a>
-      <a class="nav-link is-active" href="/thumbnails" aria-current="page">Thumbnails</a>
-      <a class="nav-link" href="/slideshow">Slideshow</a>
+      <a class="nav-link" href="${prefixedPath('/ui')}">Camera</a>
+      <a class="nav-link" href="${prefixedPath('/receiver')}">Receiver</a>
+      <a class="nav-link is-active" href="${prefixedPath('/thumbnails')}" aria-current="page">Thumbnails</a>
+      <a class="nav-link" href="${prefixedPath('/slideshow')}">Slideshow</a>
     </nav>
     <section class="card">
       <p class="card-title">Slideshow photos</p>
@@ -1661,7 +1690,7 @@ const THUMBNAILS_HTML = `<!DOCTYPE html>
       saving = true;
       setStatus('Saving…', 'ok');
       try {
-        const res = await fetch('/thumbnails/selection', {
+        const res = await fetch('${prefixedPath('/thumbnails/selection')}', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ excluded }),
@@ -1738,7 +1767,7 @@ const THUMBNAILS_HTML = `<!DOCTYPE html>
 
     async function loadPhotos() {
       try {
-        const res = await fetch('/thumbnails/photos');
+        const res = await fetch('${prefixedPath('/thumbnails/photos')}');
         const data = await res.json();
         photos = data.photos || [];
         render();
@@ -1775,7 +1804,7 @@ const THUMBNAILS_HTML = `<!DOCTYPE html>
       );
     });
 
-    const watch = new EventSource('/watch?initial=0');
+    const watch = new EventSource('${prefixedPath('/watch')}?initial=0');
     watch.addEventListener('photo', () => { void loadPhotos(); });
 
     void loadPhotos();
@@ -1815,6 +1844,30 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       background: transparent;
     }
     #fsIdleShield[hidden] { display: none !important; }
+    #fsHint {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 25;
+      max-width: min(22rem, calc(100vw - 2rem));
+      padding: 1rem 1.15rem;
+      border-radius: 12px;
+      background: rgba(15, 23, 42, 0.94);
+      color: #f8fafc;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(8px);
+      text-align: center;
+    }
+    #fsHint[hidden] { display: none !important; }
+    #fsHint p {
+      margin: 0 0 0.65rem;
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+    #fsHintFullscreenBtn {
+      width: 100%;
+    }
     #stage {
       position: fixed;
       inset: 0;
@@ -1952,6 +2005,24 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       cursor: pointer;
     }
     .check-row input { accent-color: #6366f1; }
+    .qr-menu-row {
+      display: flex;
+      align-items: stretch;
+      gap: 0.45rem;
+    }
+    .qr-show-toggle {
+      flex-shrink: 0;
+      margin: 0;
+      padding: 0 0.55rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+    }
+    .qr-menu-row .transition-picker-btn {
+      flex: 1;
+      min-width: 0;
+      width: auto;
+    }
     .transition-picker-btn {
       width: 100%;
       display: flex;
@@ -2057,7 +2128,6 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       margin: 0.5rem 0 0.25rem;
       color: #cbd5e1;
     }
-    .qr-options label:first-of-type { margin-top: 0.65rem; }
     .transition-sheet-body > .check-row { margin-bottom: 0.15rem; }
     #qrOverlay {
       position: fixed;
@@ -2268,6 +2338,10 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
   </div>
   <p id="empty">No photos uploaded yet.</p>
   <div id="fsIdleShield" hidden aria-hidden="true"></div>
+  <div id="fsHint" hidden role="dialog" aria-live="polite" aria-labelledby="fsHintTitle">
+    <p id="fsHintTitle">Your browser blocked automatic fullscreen.</p>
+    <button type="button" id="fsHintFullscreenBtn" class="menu-btn">Fullscreen</button>
+  </div>
   <div id="qrOverlay" class="pos-bl size-medium" hidden>
     <div class="qr-card">
       <div class="qr-frame">
@@ -2297,13 +2371,21 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     </div>
     <div class="field">
       <label for="qrPickerBtn">QR code</label>
-      <button type="button" id="qrPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
-        <span id="qrPickerSummary">On · bottom left</span>
-        <span class="transition-picker-chevron" aria-hidden="true">▾</span>
-      </button>
+      <div class="qr-menu-row">
+        <label class="qr-show-toggle check-row" for="qrShow" aria-label="Show QR code">
+          <input type="checkbox" id="qrShow" checked>
+        </label>
+        <button type="button" id="qrPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
+          <span id="qrPickerSummary">On · bottom left</span>
+          <span class="transition-picker-chevron" aria-hidden="true">▾</span>
+        </button>
+      </div>
     </div>
     <div class="field">
       <button type="button" id="fullscreenBtn" class="menu-btn">Fullscreen</button>
+    </div>
+    <div class="field">
+      <button type="button" id="copyShareUrlBtn" class="menu-btn">Copy URL and Settings</button>
     </div>
     <div id="settingsOverlay" class="transition-overlay" hidden>
       <div class="transition-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsSheetTitle">
@@ -2330,10 +2412,6 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           <button type="button" id="qrCloseBtn" class="transition-close-btn" aria-label="Close">×</button>
         </div>
         <div class="transition-sheet-body">
-          <label class="check-row">
-            <input type="checkbox" id="qrShow" checked>
-            Show QR code
-          </label>
           <div class="qr-options" id="qrOptions">
             <label for="qrCorner">Corner</label>
             <select id="qrCorner">
@@ -2406,6 +2484,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const emptyEl = document.getElementById('empty');
     const menu = document.getElementById('menu');
     const fsIdleShield = document.getElementById('fsIdleShield');
+    const fsHint = document.getElementById('fsHint');
+    const fsHintFullscreenBtn = document.getElementById('fsHintFullscreenBtn');
     const menuCloseBtn = document.getElementById('menuCloseBtn');
     const displayTimeInput = document.getElementById('displayTime');
     const transitionSpeedInput = document.getElementById('transitionSpeed');
@@ -2413,6 +2493,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const settingsPickerSummary = document.getElementById('settingsPickerSummary');
     const settingsOverlay = document.getElementById('settingsOverlay');
     const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+    const copyShareUrlBtn = document.getElementById('copyShareUrlBtn');
     const transitionPickerBtn = document.getElementById('transitionPickerBtn');
     const transitionOverlay = document.getElementById('transitionOverlay');
     const transitionCloseBtn = document.getElementById('transitionCloseBtn');
@@ -2505,6 +2586,154 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       bl: 'bottom left',
       br: 'bottom right',
     };
+    const QR_SIZE_VALUES = new Set(['small', 'medium', 'large']);
+    const QR_BRAND_IMAGE_VALUES = new Set(['none', 'fotoblast', 'custom']);
+    const TRANSITION_VALUE_SET = new Set(TRANSITION_OPTIONS.map((o) => o.value));
+
+    function parseQueryBool(raw, fallback) {
+      if (raw === null || raw === '') return fallback;
+      const s = String(raw).trim().toLowerCase();
+      if (s === '1' || s === 'true' || s === 'yes' || s === 'on') return true;
+      if (s === '0' || s === 'false' || s === 'no' || s === 'off') return false;
+      return fallback;
+    }
+
+    function clampQueryNumber(raw, min, max, fallback, step) {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return fallback;
+      let clamped = Math.min(max, Math.max(min, n));
+      if (step) {
+        clamped = Math.round(clamped / step) * step;
+        clamped = Math.min(max, Math.max(min, clamped));
+      }
+      return clamped;
+    }
+
+    function applyInitialSettingsFromQuery() {
+      const params = new URLSearchParams(location.search);
+      let shouldApplySettings = false;
+
+      const displayRaw = params.get('display') ?? params.get('displayTime');
+      if (displayRaw !== null) {
+        displayTimeInput.value = String(
+          clampQueryNumber(displayRaw, 1, 30, Number(displayTimeInput.value), 1),
+        );
+        shouldApplySettings = true;
+      }
+
+      const speedRaw = params.get('transitionSpeed') ?? params.get('speed');
+      if (speedRaw !== null) {
+        transitionSpeedInput.value = String(
+          clampQueryNumber(speedRaw, 0.1, 10, Number(transitionSpeedInput.value), 0.1),
+        );
+        shouldApplySettings = true;
+      }
+
+      if (params.has('transitions')) {
+        const raw = params.get('transitions') || '';
+        const normalized = raw.trim().toLowerCase();
+        let selected = new Set();
+        if (normalized && normalized !== 'none') {
+          const parts = normalized === 'all'
+            ? TRANSITION_OPTIONS.map((o) => o.value)
+            : raw.split(',');
+          selected = new Set(
+            parts.map((s) => s.trim()).filter((s) => TRANSITION_VALUE_SET.has(s)),
+          );
+        }
+        getTransitionCheckboxes().forEach((cb) => {
+          cb.checked = selected.has(cb.value);
+        });
+        syncSelectAllCheckbox();
+        updateTransitionSummary();
+        shouldApplySettings = true;
+      }
+
+      const qrRaw = params.get('qr') ?? params.get('qrShow');
+      if (qrRaw !== null) {
+        qrShow.checked = parseQueryBool(qrRaw, qrShow.checked);
+      }
+
+      const corner = params.get('qrCorner');
+      if (corner !== null && QR_CORNER_LABELS[corner]) {
+        qrCorner.value = corner;
+      }
+
+      const size = params.get('qrSize');
+      if (size !== null && QR_SIZE_VALUES.has(size)) {
+        qrSize.value = size;
+      }
+
+      const brandImage = params.get('qrBrandImage');
+      if (brandImage !== null && QR_BRAND_IMAGE_VALUES.has(brandImage)) {
+        qrBrandImage.value = brandImage;
+      }
+
+      const brand = params.get('qrBrand') ?? params.get('qrLabel');
+      if (brand !== null) {
+        qrBrand.value = brand.slice(0, 48);
+      }
+
+      return {
+        shouldApplySettings,
+        enterFullscreen: parseQueryBool(params.get('fullscreen'), false),
+      };
+    }
+
+    function composeShareUrl() {
+      const params = new URLSearchParams();
+      params.set('display', displayTimeInput.value);
+      params.set('transitionSpeed', String(Number(transitionSpeedInput.value)));
+
+      const selected = getSelectedTransitions();
+      if (!selected.length) {
+        params.set('transitions', 'none');
+      } else if (selected.length === TRANSITION_OPTIONS.length) {
+        params.set('transitions', 'all');
+      } else {
+        params.set('transitions', selected.join(','));
+      }
+
+      params.set('qr', qrShow.checked ? '1' : '0');
+      params.set('qrCorner', qrCorner.value);
+      params.set('qrSize', qrSize.value);
+      params.set('qrBrandImage', qrBrandImage.value);
+      params.set('qrBrand', getQrBrandLabel());
+      if (isFullscreen()) params.set('fullscreen', '1');
+
+      return location.origin + location.pathname + '?' + params.toString();
+    }
+
+    async function copyTextToClipboard(text) {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+
+    async function copyShareUrl() {
+      const url = composeShareUrl();
+      const defaultLabel = 'Copy URL and Settings';
+      scheduleMenuHide();
+      try {
+        await copyTextToClipboard(url);
+        copyShareUrlBtn.textContent = 'Copied!';
+      } catch (_) {
+        copyShareUrlBtn.textContent = 'Copy failed';
+      }
+      setTimeout(() => {
+        copyShareUrlBtn.textContent = defaultLabel;
+      }, 2000);
+    }
 
     function isSubpanelOpen() {
       return !settingsOverlay.hidden || !qrSettingsOverlay.hidden || !transitionOverlay.hidden;
@@ -2653,6 +2882,127 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         (a, b) => (photoLastShown.get(a.p.filename) || 0) - (photoLastShown.get(b.p.filename) || 0),
       );
       return candidates[0].i;
+    }
+
+    function pickAdjacentIndex(delta) {
+      if (!photos.length) return 0;
+      if (photos.length === 1) return 0;
+      return (index + delta + photos.length) % photos.length;
+    }
+
+    function abortTransition() {
+      cancelTvTunerRaf();
+      clearTimeout(transitionTimer);
+      transitionTimer = null;
+      stage.classList.remove('static-on');
+      stage.style.removeProperty('--static-noise');
+      clearTvTunerGlitch(active);
+      clearTvTunerGlitch(idle);
+      transitioning = false;
+      if (photos.length) {
+        active.src = photos[index].url;
+        active.alt = photos[index].filename;
+        resetLayer(active, false);
+        resetLayer(idle, true);
+        idle.removeAttribute('src');
+      }
+    }
+
+    async function performSlideChange(nextIndex, instant) {
+      if (photos.length < 2) return;
+      if (transitioning) abortTransition();
+
+      clearTimeout(holdTimer);
+      holdTimer = null;
+
+      if (nextIndex === index) {
+        scheduleHold();
+        return;
+      }
+
+      transitioning = true;
+      const next = photos[nextIndex];
+      const type = instant ? 'none' : resolveTransitionType();
+      const duration = getTransitionMs();
+
+      try {
+        try {
+          await preload(next.url);
+        } catch (_) {
+          scheduleHold();
+          return;
+        }
+
+        const out = active;
+        const inn = idle;
+
+        inn.src = next.url;
+        inn.alt = next.filename;
+
+        if (type === 'none') {
+          finishSwap(out, inn, nextIndex);
+          return;
+        }
+
+        if (type === 'static') {
+          stage.classList.add('static-on');
+          await waitMs(Math.round(duration * 0.5));
+          finishSwap(out, inn, nextIndex);
+          await waitMs(Math.round(duration * 0.5));
+          stage.classList.remove('static-on');
+          stage.style.removeProperty('--static-noise');
+          return;
+        }
+
+        if (type === 'tuner') {
+          await waitForLayerPaint(inn);
+          await runTvTunerTransition(out, inn, duration, nextIndex);
+          return;
+        }
+
+        if (type === 'blur' || type === 'scan') {
+          const effectDur = duration + 'ms';
+          out.className = 'layer from ' + type;
+          inn.className = 'layer to ' + type;
+          out.style.setProperty('--effect-duration', effectDur);
+          inn.style.setProperty('--effect-duration', effectDur);
+          await waitForLayerPaint(inn);
+          commitTransitionFrame(out, inn);
+          out.classList.add('run');
+          inn.classList.add('run');
+          await waitMs(duration);
+          finishSwap(out, inn, nextIndex);
+          return;
+        }
+
+        out.className = 'layer from ' + type;
+        inn.className = 'layer to ' + type;
+        applyTransitionTiming(out, inn, type, duration);
+
+        void out.offsetWidth;
+        void inn.offsetWidth;
+        out.classList.add('animate');
+        inn.classList.add('animate');
+
+        await waitMs(duration);
+        finishSwap(out, inn, nextIndex);
+      } finally {
+        transitioning = false;
+      }
+    }
+
+    function onSlideshowKeydown(e) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+
+      let delta = 0;
+      if (e.key === 'ArrowRight') delta = 1;
+      else if (e.key === 'ArrowLeft') delta = -1;
+      else return;
+
+      e.preventDefault();
+      void performSlideChange(pickAdjacentIndex(delta), e.shiftKey);
     }
 
     function finishSwap(out, inn, nextIndex) {
@@ -2920,6 +3270,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function scheduleMenuHide() {
+      if (isMenuAutoShowBlocked()) return;
       showMenu();
     }
 
@@ -3014,8 +3365,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function buildQrImageUrl(px, withLogo) {
-      const uiUrl = location.protocol + '//' + location.host + '/ui';
-      let url = '/qr?w=' + px + '&url=' + encodeURIComponent(uiUrl);
+      const uiUrl = location.protocol + '//' + location.host + '${prefixedPath('/ui')}';
+      let url = '${prefixedPath('/qr')}?w=' + px + '&url=' + encodeURIComponent(uiUrl);
       if (location.port) url += '&port=' + encodeURIComponent(location.port);
       if (withLogo) url += '&ec=H';
       return url;
@@ -3053,6 +3404,68 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     let wakeLock = null;
+    let fsHintShowTimer = null;
+    let fsHintDismissTimer = null;
+    let fsHintPending = false;
+    let menuAutoShowBlockedUntil = 0;
+
+    function isMenuAutoShowBlocked() {
+      if (fsHintPending || !fsHint.hidden) return true;
+      return Date.now() < menuAutoShowBlockedUntil;
+    }
+
+    function blockMenuAutoShow(ms = 500) {
+      menuAutoShowBlockedUntil = Math.max(menuAutoShowBlockedUntil, Date.now() + ms);
+      hideMenu();
+    }
+
+    function clearFsHintListeners() {
+      document.removeEventListener('click', onFsHintWake, true);
+      document.removeEventListener('touchstart', onFsHintWake, true);
+    }
+
+    function dismissFsHint() {
+      fsHintPending = false;
+      clearTimeout(fsHintShowTimer);
+      clearTimeout(fsHintDismissTimer);
+      fsHintShowTimer = null;
+      fsHintDismissTimer = null;
+      clearFsHintListeners();
+      fsHint.hidden = true;
+      blockMenuAutoShow();
+    }
+
+    function showFsHint() {
+      if (isFullscreen()) {
+        dismissFsHint();
+        return;
+      }
+      fsHintPending = false;
+      clearTimeout(fsHintShowTimer);
+      fsHintShowTimer = null;
+      clearFsHintListeners();
+      fsHint.hidden = false;
+      fsHintFullscreenBtn.disabled = !fullscreenSupported();
+      hideMenu();
+      clearTimeout(fsHintDismissTimer);
+      fsHintDismissTimer = setTimeout(dismissFsHint, 5000);
+    }
+
+    function onFsHintWake() {
+      if (!fsHintPending || !fsHint.hidden) return;
+      showFsHint();
+    }
+
+    function armFsHint() {
+      if (isFullscreen()) return;
+      dismissFsHint();
+      fsHintPending = true;
+      menuAutoShowBlockedUntil = 0;
+      hideMenu();
+      fsHintShowTimer = setTimeout(showFsHint, 5000);
+      document.addEventListener('click', onFsHintWake, true);
+      document.addEventListener('touchstart', onFsHintWake, true);
+    }
 
     function shouldHideCursorInFullscreen() {
       return isFullscreen() && !isMenuVisible() && !isSubpanelOpen();
@@ -3102,23 +3515,40 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function onFullscreenChange() {
       updateFullscreenBtn();
+      if (isFullscreen()) {
+        dismissFsHint();
+        blockMenuAutoShow();
+      }
       updateFullscreenPresentation();
     }
 
-    async function toggleFullscreen() {
-      scheduleMenuHide();
-      if (!fullscreenSupported()) return;
+    async function enterFullscreen() {
+      if (!fullscreenSupported() || isFullscreen()) return isFullscreen();
       try {
-        if (isFullscreen()) {
-          if (document.exitFullscreen) await document.exitFullscreen();
-          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-        } else {
-          const el = document.documentElement;
-          if (el.requestFullscreen) await el.requestFullscreen();
-          else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        }
+        const el = document.documentElement;
+        const opts = { navigationUI: 'hide' };
+        if (el.requestFullscreen) await el.requestFullscreen(opts);
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
       } catch (_) {}
       onFullscreenChange();
+      return isFullscreen();
+    }
+
+    async function exitFullscreen() {
+      if (!isFullscreen()) return false;
+      try {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      } catch (_) {}
+      onFullscreenChange();
+      return !isFullscreen();
+    }
+
+    async function toggleFullscreen() {
+      if (!fullscreenSupported()) return false;
+      if (isFullscreen()) return exitFullscreen();
+      blockMenuAutoShow();
+      return enterFullscreen();
     }
 
     function setPhotoList(list) {
@@ -3182,79 +3612,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     async function advanceSlide() {
       if (transitioning || photos.length < 2) return;
-      transitioning = true;
-      clearTimeout(holdTimer);
-      holdTimer = null;
-
-      const nextIndex = pickNextIndex(true);
-      const next = photos[nextIndex];
-      const type = resolveTransitionType();
-      const duration = getTransitionMs();
-
-      try {
-        try {
-          await preload(next.url);
-        } catch (_) {
-          scheduleHold();
-          return;
-        }
-
-        const out = active;
-        const inn = idle;
-
-        inn.src = next.url;
-        inn.alt = next.filename;
-
-        if (type === 'none') {
-          finishSwap(out, inn, nextIndex);
-          return;
-        }
-
-        if (type === 'static') {
-          stage.classList.add('static-on');
-          await waitMs(Math.round(duration * 0.5));
-          finishSwap(out, inn, nextIndex);
-          await waitMs(Math.round(duration * 0.5));
-          stage.classList.remove('static-on');
-          stage.style.removeProperty('--static-noise');
-          return;
-        }
-
-        if (type === 'tuner') {
-          await waitForLayerPaint(inn);
-          await runTvTunerTransition(out, inn, duration, nextIndex);
-          return;
-        }
-
-        if (type === 'blur' || type === 'scan') {
-          const effectDur = duration + 'ms';
-          out.className = 'layer from ' + type;
-          inn.className = 'layer to ' + type;
-          out.style.setProperty('--effect-duration', effectDur);
-          inn.style.setProperty('--effect-duration', effectDur);
-          await waitForLayerPaint(inn);
-          commitTransitionFrame(out, inn);
-          out.classList.add('run');
-          inn.classList.add('run');
-          await waitMs(duration);
-          finishSwap(out, inn, nextIndex);
-          return;
-        }
-
-        out.className = 'layer from ' + type;
-        inn.className = 'layer to ' + type;
-        applyTransitionTiming(out, inn, type, duration);
-
-        void out.offsetWidth;
-        void inn.offsetWidth;
-        out.classList.add('animate');
-        inn.classList.add('animate');
-
-        await waitMs(duration);
-        finishSwap(out, inn, nextIndex);
-      } finally {
-        transitioning = false;
-      }
+      await performSlideChange(pickNextIndex(true), false);
     }
 
     function applySettings() {
@@ -3275,7 +3633,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     async function loadPhotos() {
-      const res = await fetch('/slideshow/photos');
+      const res = await fetch('${prefixedPath('/slideshow/photos')}');
       const data = await res.json();
       setPhotoList(data.photos || []);
     }
@@ -3299,6 +3657,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
     transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
+    copyShareUrlBtn.addEventListener('click', () => { void copyShareUrl(); });
     menuCloseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       closeMenu();
@@ -3327,6 +3686,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       syncQrBrandFields();
       void updateQrOverlay();
     });
+    document.addEventListener('keydown', onSlideshowKeydown);
     document.addEventListener('fullscreenchange', onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', onFullscreenChange);
     document.addEventListener('visibilitychange', () => {
@@ -3337,20 +3697,36 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     menu.addEventListener('focusin', scheduleMenuHide);
     fsIdleShield.addEventListener('mousemove', onFullscreenPointerWake);
     fsIdleShield.addEventListener('mousedown', onFullscreenPointerWake);
+    fsHintFullscreenBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      blockMenuAutoShow();
+      void enterFullscreen().then((ok) => {
+        if (ok) dismissFsHint();
+      });
+    });
     document.addEventListener('mousemove', () => {
       if (isFullscreen() && shouldHideCursorInFullscreen()) return;
       scheduleMenuHide();
     });
 
-    const watch = new EventSource('/watch?initial=0');
+    const watch = new EventSource('${prefixedPath('/watch')}?initial=0');
     watch.addEventListener('photo', () => { void loadPhotos(); });
     watch.addEventListener('slideshow-selection', () => { void loadPhotos(); });
 
+    const initialFromQuery = applyInitialSettingsFromQuery();
     updateLabels();
     updateFullscreenBtn();
     syncQrBrandFields();
     void updateQrOverlay();
+    if (initialFromQuery.shouldApplySettings) applySettings();
     void loadPhotos();
+    if (initialFromQuery.enterFullscreen) {
+      requestAnimationFrame(() => {
+        void enterFullscreen().then((ok) => {
+          if (!ok) armFsHint();
+        });
+      });
+    }
   </script>
 </body>
 </html>`;
