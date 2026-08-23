@@ -12,7 +12,8 @@ RUN mkdir -p /app/repo
 
 ENV PORT=3000
 ENV REPO_DIR=/app/repo
-ENV EVENT_NAME=demo
+ARG EVENT_NAME=demo
+ENV EVENT_NAME=${EVENT_NAME}
 RUN chown -R node:node /app/repo
 
 EXPOSE 3000
