@@ -70,7 +70,22 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `qrSize` | — | `small`, `medium`, `large` | `medium` |
 | `qrBrandImage` | — | `none`, `fotoblast`, `custom` | `fotoblast` |
 | `qrBrand` | `qrLabel` | Text, max 48 chars | `FotoBlast` |
+| `showEventName` | `eventName` | `1`/`0`, `true`/`false` | `false` (shows `EVENT_NAME` at top when enabled) |
+| `eventNameFont` | `bannerFont` | See font list below | `system` |
+| `eventNameSize` | `bannerSize` | `2`–`100` (% of screen height); also accepts legacy `small`/`medium`/`large`/`xlarge` | `6` |
+| `eventNameColor` | `bannerColor` | `#RRGGBB` | `#f8fafc` |
+| `eventNameShadow` | `bannerShadow` | `1`/`0`, `true`/`false` | `true` |
+| `eventNameShadowDist` | `bannerShadowDist` | `0`–`24` (relative; scales with text size) | `4` |
+| `eventNameShadowBlur` | `bannerShadowBlur` | `0`–`24` (relative; scales with text size) | `2` |
+| `eventNameScroll` | `bannerScroll` | `1`/`0`, `true`/`false` | `false` |
+| `eventNameScrollSpeed` | `bannerScrollSpeed` | `1`–`10` (10 is very fast) | `5` |
 | `fullscreen` | — | `1`/`0`, `true`/`false` | `false` (if blocked, a hint appears after 5s or on click) |
+
+Event name fonts:
+
+- Clean: `system`, `montserrat`, `oswald`, `bebas`, `roboto-slab`
+- Elegant: `playfair`, `cormorant`, `cinzel`, `libre-baskerville`, `merriweather`, `great-vibes`, `parisienne`
+- Playful: `dancing`, `pacifico`, `lobster`, `fredoka`, `comfortaa`, `comic-neue`, `bubblegum`, `caveat`, `permanent-marker`, `bangers`
 
 Transition ids include: `fade`, `slide-left`, `slide-right`, `slide-up`, `slide-down`, `zoom-in`, `zoom-out`, `blur`, `scan`, `rotate`, `flip-h`, `flip-v`, `wipe-left`, `dissolve`, `push`, `fade-black`, `morph`, `shatter`, `static`, `tuner`, `smash`, `bounce`.
 

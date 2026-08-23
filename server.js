@@ -11,6 +11,8 @@ const ICONS_DIR = path.join(__dirname, 'icons');
 const VIRTUAL_PATH = normalizeVirtualPath(process.env.VIRTUAL_PATH || '');
 const MAX_UPLOAD_MB = Math.max(1, Number(process.env.MAX_UPLOAD_MB) || 25);
 const MAX_UPLOAD_BYTES = Math.floor(MAX_UPLOAD_MB * 1024 * 1024);
+const EVENT_NAME = String(process.env.EVENT_NAME || '').trim();
+const EVENT_NAME_DISPLAY = humanizeEventName(EVENT_NAME);
 let QRCodeLib;
 try {
   QRCodeLib = require('qrcode');
@@ -32,6 +34,23 @@ function prefixedPath(p) {
   if (!VIRTUAL_PATH) return route;
   if (route === '/') return `${VIRTUAL_PATH}/`;
   return `${VIRTUAL_PATH}${route}`;
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function humanizeEventName(raw) {
+  return String(raw || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const ICON_PUBLIC_NAMES = [
@@ -460,6 +479,7 @@ heartbeat.unref();
 app.listen(PORT, () => {
   console.log(`Fotoblast listening on http://0.0.0.0:${PORT}`);
   if (VIRTUAL_PATH) console.log(`Virtual path: ${VIRTUAL_PATH}`);
+  if (EVENT_NAME) console.log(`Event name: ${EVENT_NAME_DISPLAY} (${EVENT_NAME})`);
   console.log(`Max upload: ${MAX_UPLOAD_MB}MB`);
   console.log(`Repo directory: ${REPO_DIR}`);
 });
@@ -473,6 +493,7 @@ const FAVICON_LINK = `<link rel="icon" href="${prefixedPath('/favicon.ico')}" ty
   <link rel="manifest" href="${prefixedPath('/site.webmanifest')}">`;
 const BRAND_LOGO_HTML =
   `<img class="brand-logo" src="${prefixedPath('/favicon-96x96.png')}" width="36" height="36" alt="">`;
+const EVENT_NAME_HTML = `<div id="eventName" data-event-name="${escapeHtml(EVENT_NAME_DISPLAY)}" data-event-slug="${escapeHtml(EVENT_NAME)}" hidden>${escapeHtml(EVENT_NAME_DISPLAY)}</div>`;
 
 const UI_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -689,6 +710,7 @@ const UI_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  ${EVENT_NAME_HTML}
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -1132,6 +1154,7 @@ const RECEIVER_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  ${EVENT_NAME_HTML}
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -1634,6 +1657,7 @@ const THUMBNAILS_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  ${EVENT_NAME_HTML}
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -1819,6 +1843,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fotoblast Slideshow</title>
   ${FAVICON_LINK}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Bebas+Neue&family=Bubblegum+Sans&family=Caveat:wght@600&family=Cinzel:wght@600&family=Comic+Neue:wght@700&family=Comfortaa:wght@600&family=Cormorant+Garamond:wght@600&family=Dancing+Script:wght@600&family=Fredoka:wght@500&family=Great+Vibes&family=Libre+Baskerville:wght@700&family=Lobster&family=Merriweather:wght@700&family=Montserrat:wght@700&family=Oswald:wght@500&family=Pacifico&family=Parisienne&family=Permanent+Marker&family=Playfair+Display:wght@700&family=Roboto+Slab:wght@600&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -1867,6 +1894,147 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
     #fsHintFullscreenBtn {
       width: 100%;
+    }
+    #eventTitleBanner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 17;
+      padding: 0.85rem 0;
+      text-align: center;
+      font-size: var(--event-title-size, 6vh);
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      line-height: 1.05;
+      color: #f8fafc;
+      pointer-events: none;
+      background: transparent;
+      overflow: visible;
+    }
+    #eventTitleBanner::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: min(7rem, 18vh);
+      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+      pointer-events: none;
+      z-index: -1;
+    }
+    #eventTitleBanner[hidden] { display: none !important; }
+    #eventTitleBanner .event-title-track {
+      display: block;
+      width: 100%;
+      padding: 0 1.25rem;
+      box-sizing: border-box;
+    }
+    #eventTitleBanner .event-title-text {
+      display: inline-block;
+      white-space: nowrap;
+      position: relative;
+      z-index: 1;
+    }
+    #eventTitleBanner.shadow .event-title-text {
+      text-shadow:
+        var(--event-shadow-x, 1px) var(--event-shadow-y, 2px) var(--event-shadow-blur, 2px) rgba(0, 0, 0, 0.8);
+    }
+    #eventTitleBanner.scroll {
+      text-align: left;
+      overflow-x: hidden;
+      overflow-y: visible;
+    }
+    #eventTitleBanner.scroll .event-title-track {
+      display: block;
+      width: max-content;
+      max-width: none;
+      padding: 0;
+      will-change: transform;
+      animation: event-title-scroll var(--event-scroll-duration, 18s) linear infinite;
+    }
+    #eventTitleBanner.scroll .event-title-text {
+      padding: 0;
+    }
+    @keyframes event-title-scroll {
+      from { transform: translateX(100vw); }
+      to { transform: translateX(-100%); }
+    }
+    .event-name-options.disabled { opacity: 0.45; pointer-events: none; }
+    .event-name-options label {
+      display: block;
+      font-size: 0.8rem;
+      margin: 0.5rem 0 0.25rem;
+      color: #cbd5e1;
+    }
+    .event-name-options .check-row {
+      margin: 0.45rem 0 0;
+    }
+    .event-name-options .field {
+      margin: 0.35rem 0 0.15rem;
+    }
+    .event-name-options .sub-option.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+    .event-name-options input[type="range"] {
+      width: 100%;
+    }
+    .font-picker {
+      position: relative;
+    }
+    .font-picker-btn {
+      width: 100%;
+    }
+    #eventNameFontLabel {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+      font-size: 1rem;
+    }
+    .font-picker-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 0.25rem);
+      z-index: 30;
+      max-height: 14rem;
+      overflow-y: auto;
+      padding: 0.3rem;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    }
+    .font-picker-menu[hidden] { display: none !important; }
+    .font-picker-group {
+      margin: 0.35rem 0.35rem 0.15rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+    .font-picker-option {
+      display: block;
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: #f8fafc;
+      text-align: left;
+      padding: 0.45rem 0.55rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1.05rem;
+      line-height: 1.3;
+    }
+    .font-picker-option:hover,
+    .font-picker-option[aria-selected="true"] {
+      background: #1e293b;
     }
     #stage {
       position: fixed;
@@ -2331,12 +2499,18 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
   </style>
 </head>
 <body>
+  ${EVENT_NAME_HTML}
   <div id="stage">
     <img id="layerA" class="layer" alt="" decoding="async">
     <img id="layerB" class="layer off" alt="" decoding="async">
     <div id="staticOverlay" aria-hidden="true"></div>
   </div>
   <p id="empty">No photos uploaded yet.</p>
+  <div id="eventTitleBanner" hidden aria-hidden="true">
+    <div class="event-title-track">
+      <span class="event-title-text"></span>
+    </div>
+  </div>
   <div id="fsIdleShield" hidden aria-hidden="true"></div>
   <div id="fsHint" hidden role="dialog" aria-live="polite" aria-labelledby="fsHintTitle">
     <p id="fsHintTitle">Your browser blocked automatic fullscreen.</p>
@@ -2401,6 +2575,47 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           <div class="field">
             <label for="transitionSpeed">Transition speed <span id="transitionSpeedVal">0.8s</span></label>
             <input type="range" id="transitionSpeed" min="0.1" max="10" step="0.1" value="0.8">
+          </div>
+          <label class="check-row" for="showEventName">
+            <input type="checkbox" id="showEventName">
+            Show event name
+          </label>
+          <div class="event-name-options disabled" id="eventNameOptions">
+            <label id="eventNameFontLabelTitle">Font</label>
+            <div class="font-picker" id="eventNameFontPicker">
+              <input type="hidden" id="eventNameFont" value="system">
+              <button type="button" id="eventNameFontBtn" class="transition-picker-btn font-picker-btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="eventNameFontLabelTitle eventNameFontLabel">
+                <span id="eventNameFontLabel">System Sans</span>
+                <span class="transition-picker-chevron" aria-hidden="true">▾</span>
+              </button>
+              <div id="eventNameFontMenu" class="font-picker-menu" role="listbox" hidden></div>
+            </div>
+            <div class="field">
+              <label for="eventNameSize">Text size <span id="eventNameSizeVal">6%</span></label>
+              <input type="range" id="eventNameSize" min="2" max="100" step="1" value="6">
+            </div>
+            <label for="eventNameColor">Text color</label>
+            <input type="color" id="eventNameColor" value="#f8fafc">
+            <label class="check-row" for="eventNameShadow">
+              <input type="checkbox" id="eventNameShadow" checked>
+              Drop shadow
+            </label>
+            <div class="field sub-option" id="eventNameShadowDistWrap">
+              <label for="eventNameShadowDist">Shadow distance <span id="eventNameShadowDistVal">4px</span></label>
+              <input type="range" id="eventNameShadowDist" min="0" max="24" step="1" value="4">
+            </div>
+            <div class="field sub-option" id="eventNameShadowBlurWrap">
+              <label for="eventNameShadowBlur">Shadow blur <span id="eventNameShadowBlurVal">2px</span></label>
+              <input type="range" id="eventNameShadowBlur" min="0" max="24" step="1" value="2">
+            </div>
+            <label class="check-row" for="eventNameScroll">
+              <input type="checkbox" id="eventNameScroll">
+              Scroll
+            </label>
+            <div class="field sub-option disabled" id="eventNameScrollSpeedWrap">
+              <label for="eventNameScrollSpeed">Scroll speed <span id="eventNameScrollSpeedVal">5</span></label>
+              <input type="range" id="eventNameScrollSpeed" min="1" max="10" step="1" value="5">
+            </div>
           </div>
         </div>
       </div>
@@ -2489,6 +2704,31 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const menuCloseBtn = document.getElementById('menuCloseBtn');
     const displayTimeInput = document.getElementById('displayTime');
     const transitionSpeedInput = document.getElementById('transitionSpeed');
+    const showEventName = document.getElementById('showEventName');
+    const eventNameOptions = document.getElementById('eventNameOptions');
+    const eventNameFont = document.getElementById('eventNameFont');
+    const eventNameFontBtn = document.getElementById('eventNameFontBtn');
+    const eventNameFontLabel = document.getElementById('eventNameFontLabel');
+    const eventNameFontMenu = document.getElementById('eventNameFontMenu');
+    const eventNameFontPicker = document.getElementById('eventNameFontPicker');
+    const eventNameSize = document.getElementById('eventNameSize');
+    const eventNameSizeVal = document.getElementById('eventNameSizeVal');
+    const eventNameColor = document.getElementById('eventNameColor');
+    const eventNameShadow = document.getElementById('eventNameShadow');
+    const eventNameShadowDist = document.getElementById('eventNameShadowDist');
+    const eventNameShadowDistVal = document.getElementById('eventNameShadowDistVal');
+    const eventNameShadowDistWrap = document.getElementById('eventNameShadowDistWrap');
+    const eventNameShadowBlur = document.getElementById('eventNameShadowBlur');
+    const eventNameShadowBlurVal = document.getElementById('eventNameShadowBlurVal');
+    const eventNameShadowBlurWrap = document.getElementById('eventNameShadowBlurWrap');
+    const eventNameScroll = document.getElementById('eventNameScroll');
+    const eventNameScrollSpeed = document.getElementById('eventNameScrollSpeed');
+    const eventNameScrollSpeedVal = document.getElementById('eventNameScrollSpeedVal');
+    const eventNameScrollSpeedWrap = document.getElementById('eventNameScrollSpeedWrap');
+    let eventTitleScrollActive = false;
+    let eventTitleScrollDurationSec = null;
+    const eventTitleBanner = document.getElementById('eventTitleBanner');
+    const eventNameEl = document.getElementById('eventName');
     const settingsPickerBtn = document.getElementById('settingsPickerBtn');
     const settingsPickerSummary = document.getElementById('settingsPickerSummary');
     const settingsOverlay = document.getElementById('settingsOverlay');
@@ -2519,7 +2759,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const qrLabel = document.getElementById('qrLabel');
 
     const QR_DEFAULT_LABEL = 'FotoBlast';
-    const QR_DEFAULT_ICON = '/icons/favicon-96x96.png';
+    const QR_DEFAULT_ICON = '${prefixedPath('/favicon-96x96.png')}';
     const QR_MARK_RATIO = 0.22;
     const QR_PIXEL = { small: 120, medium: 176, large: 240 };
     let qrBrandObjectUrl = null;
@@ -2589,6 +2829,40 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const QR_SIZE_VALUES = new Set(['small', 'medium', 'large']);
     const QR_BRAND_IMAGE_VALUES = new Set(['none', 'fotoblast', 'custom']);
     const TRANSITION_VALUE_SET = new Set(TRANSITION_OPTIONS.map((o) => o.value));
+
+    const EVENT_NAME_FONT_OPTIONS = [
+      { value: 'system', label: 'System Sans', stack: 'system-ui, -apple-system, sans-serif', group: 'Clean' },
+      { value: 'montserrat', label: 'Montserrat', stack: "'Montserrat', sans-serif", group: 'Clean' },
+      { value: 'oswald', label: 'Oswald', stack: "'Oswald', sans-serif", group: 'Clean' },
+      { value: 'bebas', label: 'Bebas Neue', stack: "'Bebas Neue', sans-serif", group: 'Clean' },
+      { value: 'roboto-slab', label: 'Roboto Slab', stack: "'Roboto Slab', serif", group: 'Clean' },
+      { value: 'playfair', label: 'Playfair Display', stack: "'Playfair Display', serif", group: 'Elegant' },
+      { value: 'cormorant', label: 'Cormorant Garamond', stack: "'Cormorant Garamond', serif", group: 'Elegant' },
+      { value: 'cinzel', label: 'Cinzel', stack: "'Cinzel', serif", group: 'Elegant' },
+      { value: 'libre-baskerville', label: 'Libre Baskerville', stack: "'Libre Baskerville', serif", group: 'Elegant' },
+      { value: 'merriweather', label: 'Merriweather', stack: "'Merriweather', serif", group: 'Elegant' },
+      { value: 'great-vibes', label: 'Great Vibes', stack: "'Great Vibes', cursive", group: 'Elegant' },
+      { value: 'parisienne', label: 'Parisienne', stack: "'Parisienne', cursive", group: 'Elegant' },
+      { value: 'dancing', label: 'Dancing Script', stack: "'Dancing Script', cursive", group: 'Playful' },
+      { value: 'pacifico', label: 'Pacifico', stack: "'Pacifico', cursive", group: 'Playful' },
+      { value: 'lobster', label: 'Lobster', stack: "'Lobster', cursive", group: 'Playful' },
+      { value: 'fredoka', label: 'Fredoka', stack: "'Fredoka', sans-serif", group: 'Playful' },
+      { value: 'comfortaa', label: 'Comfortaa', stack: "'Comfortaa', sans-serif", group: 'Playful' },
+      { value: 'comic-neue', label: 'Comic Neue', stack: "'Comic Neue', cursive", group: 'Playful' },
+      { value: 'bubblegum', label: 'Bubblegum Sans', stack: "'Bubblegum Sans', cursive", group: 'Playful' },
+      { value: 'caveat', label: 'Caveat', stack: "'Caveat', cursive", group: 'Playful' },
+      { value: 'permanent-marker', label: 'Permanent Marker', stack: "'Permanent Marker', cursive", group: 'Playful' },
+      { value: 'bangers', label: 'Bangers', stack: "'Bangers', cursive", group: 'Playful' },
+    ];
+    const EVENT_NAME_FONTS = Object.fromEntries(
+      EVENT_NAME_FONT_OPTIONS.map((f) => [f.value, f.stack]),
+    );
+    const EVENT_NAME_FONT_VALUES = new Set(EVENT_NAME_FONT_OPTIONS.map((f) => f.value));
+    const EVENT_NAME_SIZE_LEGACY = { small: 4, medium: 6, large: 12, xlarge: 20 };
+
+    function getEventNameSizeVh() {
+      return clampQueryNumber(eventNameSize.value, 2, 100, 6, 1);
+    }
 
     function parseQueryBool(raw, fallback) {
       if (raw === null || raw === '') return fallback;
@@ -2674,6 +2948,61 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         qrBrand.value = brand.slice(0, 48);
       }
 
+      const eventNameRaw = params.get('showEventName') ?? params.get('eventName');
+      if (eventNameRaw !== null && !showEventName.disabled) {
+        showEventName.checked = parseQueryBool(eventNameRaw, showEventName.checked);
+      }
+
+      const fontRaw = params.get('eventNameFont') ?? params.get('bannerFont');
+      if (fontRaw !== null && EVENT_NAME_FONT_VALUES.has(fontRaw)) {
+        eventNameFont.value = fontRaw;
+      }
+
+      const sizeRaw = params.get('eventNameSize') ?? params.get('bannerSize');
+      if (sizeRaw !== null) {
+        if (EVENT_NAME_SIZE_LEGACY[sizeRaw] != null) {
+          eventNameSize.value = String(EVENT_NAME_SIZE_LEGACY[sizeRaw]);
+        } else {
+          eventNameSize.value = String(clampQueryNumber(sizeRaw, 2, 100, Number(eventNameSize.value), 1));
+        }
+      }
+
+      const colorRaw = params.get('eventNameColor') ?? params.get('bannerColor');
+      if (colorRaw !== null && /^#[0-9a-fA-F]{6}$/.test(colorRaw)) {
+        eventNameColor.value = colorRaw.toLowerCase();
+      }
+
+      const shadowRaw = params.get('eventNameShadow') ?? params.get('bannerShadow');
+      if (shadowRaw !== null) {
+        eventNameShadow.checked = parseQueryBool(shadowRaw, eventNameShadow.checked);
+      }
+
+      const shadowDistRaw = params.get('eventNameShadowDist') ?? params.get('bannerShadowDist');
+      if (shadowDistRaw !== null) {
+        eventNameShadowDist.value = String(
+          clampQueryNumber(shadowDistRaw, 0, 24, Number(eventNameShadowDist.value), 1),
+        );
+      }
+
+      const shadowBlurRaw = params.get('eventNameShadowBlur') ?? params.get('bannerShadowBlur');
+      if (shadowBlurRaw !== null) {
+        eventNameShadowBlur.value = String(
+          clampQueryNumber(shadowBlurRaw, 0, 24, Number(eventNameShadowBlur.value), 1),
+        );
+      }
+
+      const scrollRaw = params.get('eventNameScroll') ?? params.get('bannerScroll');
+      if (scrollRaw !== null) {
+        eventNameScroll.checked = parseQueryBool(scrollRaw, eventNameScroll.checked);
+      }
+
+      const scrollSpeedRaw = params.get('eventNameScrollSpeed') ?? params.get('bannerScrollSpeed');
+      if (scrollSpeedRaw !== null) {
+        eventNameScrollSpeed.value = String(
+          clampQueryNumber(scrollSpeedRaw, 1, 10, Number(eventNameScrollSpeed.value), 1),
+        );
+      }
+
       return {
         shouldApplySettings,
         enterFullscreen: parseQueryBool(params.get('fullscreen'), false),
@@ -2699,6 +3028,15 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       params.set('qrSize', qrSize.value);
       params.set('qrBrandImage', qrBrandImage.value);
       params.set('qrBrand', getQrBrandLabel());
+      params.set('showEventName', showEventName.checked ? '1' : '0');
+      params.set('eventNameFont', eventNameFont.value);
+      params.set('eventNameSize', String(getEventNameSizeVh()));
+      params.set('eventNameColor', eventNameColor.value);
+      params.set('eventNameShadow', eventNameShadow.checked ? '1' : '0');
+      params.set('eventNameShadowDist', eventNameShadowDist.value);
+      params.set('eventNameShadowBlur', eventNameShadowBlur.value);
+      params.set('eventNameScroll', eventNameScroll.checked ? '1' : '0');
+      params.set('eventNameScrollSpeed', eventNameScrollSpeed.value);
       if (isFullscreen()) params.set('fullscreen', '1');
 
       return location.origin + location.pathname + '?' + params.toString();
@@ -2766,6 +3104,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function setSettingsPanelOpen(open) {
       if (open) closeOtherSubpanels('settings');
+      else setEventNameFontMenuOpen(false);
       settingsOverlay.hidden = !open;
       settingsPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       syncSubpanelMenuState();
@@ -3016,8 +3355,163 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function updateSettingsPickerSummary() {
-      settingsPickerSummary.textContent =
+      let text =
         displayTimeInput.value + 's each · ' + Number(transitionSpeedInput.value).toFixed(1) + 's transition';
+      if (showEventName.checked && !showEventName.disabled) text += ' · event name';
+      settingsPickerSummary.textContent = text;
+    }
+
+    function getEventDisplayName() {
+      if (!eventNameEl) return '';
+      return (eventNameEl.dataset.eventName || eventNameEl.textContent || '').trim();
+    }
+
+    function getEventNameFontOption(value) {
+      return EVENT_NAME_FONT_OPTIONS.find((f) => f.value === value) || EVENT_NAME_FONT_OPTIONS[0];
+    }
+
+    function setEventNameFontMenuOpen(open) {
+      eventNameFontMenu.hidden = !open;
+      eventNameFontBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function syncEventNameFontSelect() {
+      const opt = getEventNameFontOption(eventNameFont.value);
+      eventNameFont.value = opt.value;
+      eventNameFontLabel.textContent = opt.label;
+      eventNameFontLabel.style.fontFamily = opt.stack;
+      eventNameFontBtn.style.fontFamily = opt.stack;
+      eventNameFontMenu.querySelectorAll('.font-picker-option').forEach((btn) => {
+        btn.setAttribute('aria-selected', btn.dataset.value === opt.value ? 'true' : 'false');
+      });
+    }
+
+    function buildEventNameFontMenu() {
+      eventNameFontMenu.innerHTML = '';
+      let lastGroup = '';
+      for (const opt of EVENT_NAME_FONT_OPTIONS) {
+        if (opt.group !== lastGroup) {
+          lastGroup = opt.group;
+          const group = document.createElement('div');
+          group.className = 'font-picker-group';
+          group.textContent = opt.group;
+          eventNameFontMenu.appendChild(group);
+        }
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'font-picker-option';
+        btn.dataset.value = opt.value;
+        btn.setAttribute('role', 'option');
+        btn.textContent = opt.label;
+        btn.style.fontFamily = opt.stack;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          eventNameFont.value = opt.value;
+          setEventNameFontMenuOpen(false);
+          scheduleMenuHide();
+          updateEventTitleBanner();
+        });
+        eventNameFontMenu.appendChild(btn);
+      }
+    }
+
+    function updateEventTitleBanner() {
+      const name = getEventDisplayName();
+      const canShow = !!name;
+      showEventName.disabled = !canShow;
+      if (!canShow) showEventName.checked = false;
+      eventNameOptions.classList.toggle('disabled', !showEventName.checked || !canShow);
+      syncEventNameFontSelect();
+
+      const shadowOptsDisabled = !eventNameShadow.checked;
+      eventNameShadowDistWrap.classList.toggle('disabled', shadowOptsDisabled);
+      eventNameShadowBlurWrap.classList.toggle('disabled', shadowOptsDisabled);
+      eventNameScrollSpeedWrap.classList.toggle('disabled', !eventNameScroll.checked);
+      eventNameScrollSpeedVal.textContent = eventNameScrollSpeed.value;
+      const sizeVh = getEventNameSizeVh();
+      eventNameSizeVal.textContent = sizeVh + '%';
+
+      const textEl = eventTitleBanner.querySelector('.event-title-text');
+      if (textEl && textEl.textContent !== name) textEl.textContent = name;
+
+      const stack = EVENT_NAME_FONTS[eventNameFont.value] || EVENT_NAME_FONTS.system;
+      const shadowStrength = Math.max(0, Number(eventNameShadowDist.value) || 0);
+      const blurStrength = Math.max(0, Number(eventNameShadowBlur.value) || 0);
+      // Scale offset/blur with text size (dial 4 at 6% size ≈ 4px)
+      const shadowDist = Math.round(shadowStrength * (sizeVh / 6));
+      const shadowBlur = Math.round(blurStrength * (sizeVh / 6));
+      eventNameShadowDistVal.textContent = shadowDist + 'px';
+      eventNameShadowBlurVal.textContent = shadowBlur + 'px';
+      eventTitleBanner.style.fontFamily = stack;
+      eventTitleBanner.style.setProperty('--event-title-size', sizeVh + 'vh');
+      eventTitleBanner.style.color = eventNameColor.value || '#f8fafc';
+      eventTitleBanner.style.setProperty('--event-shadow-x', Math.max(0, Math.round(shadowDist * 0.2)) + 'px');
+      eventTitleBanner.style.setProperty('--event-shadow-y', shadowDist + 'px');
+      eventTitleBanner.style.setProperty('--event-shadow-blur', shadowBlur + 'px');
+      // Leave room below so the shadow isn't clipped
+      const shadowPad = eventNameShadow.checked ? shadowDist + shadowBlur + 6 : 0;
+      eventTitleBanner.style.paddingBottom = Math.max(14, shadowPad) + 'px';
+      eventTitleBanner.classList.toggle('shadow', eventNameShadow.checked);
+      eventTitleBanner.classList.toggle('scroll', eventNameScroll.checked);
+
+      const track = eventTitleBanner.querySelector('.event-title-track');
+      if (track) {
+        const wantScroll = eventNameScroll.checked && !!name;
+        if (wantScroll) {
+          const charPx = Math.max(12, (sizeVh / 100) * window.innerHeight * 0.55);
+          const approxPx = Math.max(name.length * charPx, 240);
+          const speed = Math.max(1, Number(eventNameScrollSpeed.value) || 5);
+          // Gentle at 1, brisk at 5, very fast at 10
+          const pxPerSec = 50 * Math.pow(1.7, speed - 1);
+          const duration = Math.max(0.35, (window.innerWidth + approxPx) / pxPerSec);
+          const durationChanged = eventTitleScrollDurationSec === null
+            || Math.abs(eventTitleScrollDurationSec - duration) > 0.05;
+          const justEnabled = !eventTitleScrollActive;
+
+          if (justEnabled || durationChanged) {
+            eventTitleBanner.style.setProperty('--event-scroll-duration', duration.toFixed(2) + 's');
+          }
+
+          if (justEnabled) {
+            track.style.animation = 'none';
+            track.style.animationDelay = '';
+            void track.offsetWidth;
+            track.style.animation = '';
+          } else if (durationChanged) {
+            // Keep the text where it is: resume at the same cycle progress
+            let progress = 0;
+            const anim = track.getAnimations()[0];
+            if (anim && anim.effect) {
+              const d = anim.effect.getComputedTiming().duration;
+              if (typeof d === 'number' && d > 0) {
+                progress = ((anim.currentTime || 0) % d) / d;
+              }
+            }
+            track.style.animation = 'none';
+            void track.offsetWidth;
+            track.style.animation = '';
+            track.style.animationDelay = '-' + (progress * duration).toFixed(3) + 's';
+          }
+
+          eventTitleScrollActive = true;
+          eventTitleScrollDurationSec = duration;
+        } else {
+          eventTitleBanner.style.removeProperty('--event-scroll-duration');
+          track.style.animation = '';
+          track.style.animationDelay = '';
+          eventTitleScrollActive = false;
+          eventTitleScrollDurationSec = null;
+        }
+      }
+
+      if (showEventName.checked && name) {
+        eventTitleBanner.hidden = false;
+        eventTitleBanner.setAttribute('aria-hidden', 'false');
+      } else {
+        eventTitleBanner.hidden = true;
+        eventTitleBanner.setAttribute('aria-hidden', 'true');
+      }
+      updateSettingsPickerSummary();
     }
 
     function updateQrPickerSummary() {
@@ -3265,6 +3759,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function closeMenu() {
+      setEventNameFontMenuOpen(false);
       closeAllSubpanels();
       hideMenu();
     }
@@ -3275,6 +3770,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function dismissMenuIfOutside(target) {
+      if (eventNameFontPicker.contains(target)) return;
+      setEventNameFontMenuOpen(false);
       if (menu.contains(target)) return;
       closeMenu();
     }
@@ -3335,22 +3832,26 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       ctx.drawImage(qrImg, 0, 0, size, size);
       if (!markSrc) return;
 
-      const mark = await loadImage(markSrc);
-      const markSize = Math.round(size * QR_MARK_RATIO);
-      const pad = Math.max(4, Math.round(markSize * 0.14));
-      const box = markSize + pad * 2;
-      const bx = (size - box) / 2;
-      const by = (size - box) / 2;
-      const radius = Math.round(pad * 0.85);
-      ctx.fillStyle = '#ffffff';
-      if (typeof ctx.roundRect === 'function') {
-        ctx.beginPath();
-        ctx.roundRect(bx, by, box, box, radius);
-        ctx.fill();
-      } else {
-        ctx.fillRect(bx, by, box, box);
+      try {
+        const mark = await loadImage(markSrc);
+        const markSize = Math.round(size * QR_MARK_RATIO);
+        const pad = Math.max(4, Math.round(markSize * 0.14));
+        const box = markSize + pad * 2;
+        const bx = (size - box) / 2;
+        const by = (size - box) / 2;
+        const radius = Math.round(pad * 0.85);
+        ctx.fillStyle = '#ffffff';
+        if (typeof ctx.roundRect === 'function') {
+          ctx.beginPath();
+          ctx.roundRect(bx, by, box, box, radius);
+          ctx.fill();
+        } else {
+          ctx.fillRect(bx, by, box, box);
+        }
+        drawImageCover(ctx, mark, bx + pad, by + pad, markSize, markSize);
+      } catch (_) {
+        /* QR alone is still usable if the brand mark fails to load */
       }
-      drawImageCover(ctx, mark, bx + pad, by + pad, markSize, markSize);
     }
 
     function applyQrChrome() {
@@ -3657,6 +4158,20 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
     transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
+    showEventName.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameFontBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      scheduleMenuHide();
+      setEventNameFontMenuOpen(eventNameFontMenu.hidden);
+    });
+    eventNameFontMenu.addEventListener('click', (e) => { e.stopPropagation(); });
+    eventNameSize.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameColor.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameShadow.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameShadowDist.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameShadowBlur.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameScroll.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameScrollSpeed.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     copyShareUrlBtn.addEventListener('click', () => { void copyShareUrl(); });
     menuCloseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -3713,8 +4228,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     watch.addEventListener('photo', () => { void loadPhotos(); });
     watch.addEventListener('slideshow-selection', () => { void loadPhotos(); });
 
+    buildEventNameFontMenu();
+    updateEventTitleBanner();
     const initialFromQuery = applyInitialSettingsFromQuery();
     updateLabels();
+    updateEventTitleBanner();
     updateFullscreenBtn();
     syncQrBrandFields();
     void updateQrOverlay();
