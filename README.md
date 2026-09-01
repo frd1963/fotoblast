@@ -13,6 +13,7 @@ Self-contained Node.js web app for capturing photos in the browser, storing them
 | `GET` | `/photos/:filename` | Download a single stored photo |
 | `GET` | `/receiver` | Browser page that connects to `/watch` and auto-downloads incoming photos |
 | `GET` | `/slideshow` | Full-screen photo slideshow (supports query params below) |
+| `GET` | `/demo` | Split view: camera UI on top, slideshow on bottom (query params apply to slideshow) |
 | `GET` | `/thumbnails` | Grid of photo thumbnails with checkboxes to include or exclude from the slideshow |
 | `GET` | `/thumbnails/photos` | JSON list of all photos with `included` flag for slideshow |
 | `PUT` | `/thumbnails/selection` | Save slideshow selection (`{ "excluded": ["filename.jpg", ...] }`) |
@@ -26,6 +27,21 @@ docker run --rm -p 3000:3000 -v fotoblast-data:/app/repo fotoblast
 ```
 
 Open http://localhost:3000/ui on a phone or desktop.
+
+### Build multiarch image for Docker Hub
+
+To build and push a multiarch image supporting both `linux/amd64` and `linux/arm64`:
+
+```bash
+# Set up a multiarch builder (one-time only)
+docker buildx create --name multiarch-builder
+docker buildx use multiarch-builder
+
+# Build and push
+docker buildx build --platform linux/amd64,linux/arm64 -t frd1963/fotoblast:latest --push .
+```
+
+Replace `frd1963/fotoblast:latest` with your own registry and tag. The `--push` flag uploads to Docker Hub; omit it to build locally if your buildx builder supports it.
 
 ## Run locally
 

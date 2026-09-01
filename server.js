@@ -343,6 +343,11 @@ app.get(prefixedPath('/slideshow'), (_req, res) => {
   res.type('html').send(SLIDESHOW_HTML);
 });
 
+app.get(prefixedPath('/demo'), (req, res) => {
+  const slideshowQuery = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+  res.type('html').send(demoHtml(slideshowQuery));
+});
+
 async function sendQrPng(req, res) {
   if (!QRCodeLib) {
     res.status(503).type('text/plain').send('QR not available');
@@ -494,6 +499,73 @@ const FAVICON_LINK = `<link rel="icon" href="${prefixedPath('/favicon.ico')}" ty
 const BRAND_LOGO_HTML =
   `<img class="brand-logo" src="${prefixedPath('/favicon-96x96.png')}" width="36" height="36" alt="">`;
 const EVENT_NAME_HTML = `<div id="eventName" data-event-name="${escapeHtml(EVENT_NAME_DISPLAY)}" data-event-slug="${escapeHtml(EVENT_NAME)}" hidden>${escapeHtml(EVENT_NAME_DISPLAY)}</div>`;
+
+function demoHtml(slideshowQuery = '') {
+  const uiSrc = prefixedPath('/ui');
+  const slideshowSrc = prefixedPath('/slideshow') + slideshowQuery;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Fotoblast Demo</title>
+  ${FAVICON_LINK}
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; overflow: hidden; background: #0f172a; }
+    .demo {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      height: 100dvh;
+    }
+    .demo-pane {
+      flex: 1 1 50%;
+      min-height: 0;
+      position: relative;
+      border: none;
+    }
+    .demo-pane + .demo-pane {
+      border-top: 2px solid rgba(255, 255, 255, 0.12);
+    }
+    .demo-pane iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      background: #fff;
+    }
+    .demo-label {
+      position: absolute;
+      top: 0.35rem;
+      left: 0.5rem;
+      z-index: 1;
+      padding: 0.2rem 0.45rem;
+      font: 600 0.7rem/1.2 system-ui, sans-serif;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: #e2e8f0;
+      background: rgba(15, 23, 42, 0.72);
+      border-radius: 4px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo">
+    <section class="demo-pane" aria-label="Camera UI">
+      <span class="demo-label">Camera</span>
+      <iframe src="${uiSrc}" title="Fotoblast camera UI"></iframe>
+    </section>
+    <section class="demo-pane" aria-label="Slideshow">
+      <span class="demo-label">Slideshow</span>
+      <iframe src="${slideshowSrc}" title="Fotoblast slideshow"></iframe>
+    </section>
+  </div>
+</body>
+</html>`;
+}
 
 const UI_HTML = `<!DOCTYPE html>
 <html lang="en">
