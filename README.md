@@ -9,11 +9,12 @@ Self-contained Node.js web app for capturing photos in the browser, storing them
 | `POST` | `/upload` | Upload an image (`multipart/form-data`, field name `photo`) |
 | `GET` | `/ui` | Camera UI with **Take fotos** button |
 | `GET` | `/sync` | Download ZIP of photos not yet downloaded on this browser (tracked via cookie) |
+| `GET` | `/download` | Download ZIP of **all** photos in the repo (no cookie tracking) |
 | `GET` | `/watch` | **Server-Sent Events** — push stream of new uploads (add `?initial=0` to only receive future photos) |
 | `GET` | `/photos/:filename` | Download a single stored photo |
 | `GET` | `/receiver` | Browser page that connects to `/watch` and auto-downloads incoming photos |
 | `GET` | `/slideshow` | Full-screen photo slideshow (supports query params below) |
-| `GET` | `/demo` | Split view: camera UI on top, slideshow on bottom (query params apply to slideshow) |
+| `GET` | `/demo` | Split view: camera UI + slideshow (top/bottom when tall, side-by-side when wide; reflows on rotate/resize) |
 | `GET` | `/thumbnails` | Grid of photo thumbnails with checkboxes to include or exclude from the slideshow |
 | `GET` | `/thumbnails/photos` | JSON list of all photos with `included` flag for slideshow |
 | `PUT` | `/thumbnails/selection` | Save slideshow selection (`{ "excluded": ["filename.jpg", ...] }`) |
@@ -42,6 +43,22 @@ docker buildx build --platform linux/amd64,linux/arm64 -t frd1963/fotoblast:late
 ```
 
 Replace `frd1963/fotoblast:latest` with your own registry and tag. The `--push` flag uploads to Docker Hub; omit it to build locally if your buildx builder supports it.
+
+### Rebuild, push, and run locally
+
+```bash
+./scripts/rebuild-and-run.sh
+```
+
+Stops any container named `fotoblast`, builds/pushes the multiarch image, pulls it, and runs it on port 3000.
+
+Useful overrides:
+
+```bash
+PUSH=0 ./scripts/rebuild-and-run.sh                          # current arch only, no push
+IMAGE=frd1963/fotoblast:multiarch ./scripts/rebuild-and-run.sh
+EVENT_NAME=smith-wedding PORT=8080 ./scripts/rebuild-and-run.sh
+```
 
 ## Run locally
 
@@ -114,3 +131,5 @@ Example:
 ## Sync behavior
 
 Each browser keeps a `synced_photos` cookie listing filenames already included in a prior `/sync` download. Calling `/sync` again only adds photos that are not in that list. Returns `204 No Content` when there is nothing new to download.
+
+Use `/download` to always get a ZIP of every photo currently in the repo (also `204` when empty).

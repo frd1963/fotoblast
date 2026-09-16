@@ -430,6 +430,47 @@ app.put(prefixedPath('/thumbnails/selection'), (req, res) => {
   res.status(400).json({ error: 'Provide excluded or included array' });
 });
 
+function zipFilenameSafe(raw) {
+  return String(raw || '')
+    .trim()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function sendPhotosZip(res, filenames, zipBasename) {
+  if (filenames.length === 0) {
+    res.status(204).end();
+    return false;
+  }
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const eventPart = zipFilenameSafe(EVENT_NAME || EVENT_NAME_DISPLAY);
+  const base = eventPart
+    ? `${eventPart}-${zipBasename}`
+    : zipBasename;
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${base}-${stamp}.zip"`,
+  );
+
+  filenames.forEach((name) => {
+    archive.file(path.join(REPO_DIR, name), { name });
+  });
+
+  archive.on('error', (err) => {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  archive.pipe(res);
+  archive.finalize();
+  return true;
+}
+
 app.get(prefixedPath('/sync'), (req, res) => {
   const synced = parseSyncedCookie(req);
   const all = listPhotos();
@@ -440,26 +481,13 @@ app.get(prefixedPath('/sync'), (req, res) => {
     return;
   }
 
-  const archive = archiver('zip', { zlib: { level: 9 } });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="photos-${stamp}.zip"`);
-
-  pending.forEach((name) => {
-    archive.file(path.join(REPO_DIR, name), { name });
-  });
-
   pending.forEach((name) => synced.add(name));
   res.setHeader('Set-Cookie', syncedCookieValue(synced));
+  sendPhotosZip(res, pending, 'photos');
+});
 
-  archive.on('error', (err) => {
-    if (!res.headersSent) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  archive.pipe(res);
-  archive.finalize();
+app.get(prefixedPath('/download'), (_req, res) => {
+  sendPhotosZip(res, listPhotos(), 'all-photos');
 });
 
 app.get('/', (_req, res) => {
@@ -517,17 +545,20 @@ function demoHtml(slideshowQuery = '') {
     .demo {
       display: flex;
       flex-direction: column;
+      width: 100%;
       height: 100%;
       height: 100dvh;
     }
     .demo-pane {
       flex: 1 1 50%;
       min-height: 0;
+      min-width: 0;
       position: relative;
       border: none;
     }
     .demo-pane + .demo-pane {
       border-top: 2px solid rgba(255, 255, 255, 0.12);
+      border-left: none;
     }
     .demo-pane iframe {
       width: 100%;
@@ -549,6 +580,22 @@ function demoHtml(slideshowQuery = '') {
       background: rgba(15, 23, 42, 0.72);
       border-radius: 4px;
       pointer-events: none;
+    }
+    /* Portrait / tall: camera on top, slideshow below */
+    @media (max-aspect-ratio: 1/1) {
+      .demo { flex-direction: column; }
+      .demo-pane + .demo-pane {
+        border-top: 2px solid rgba(255, 255, 255, 0.12);
+        border-left: none;
+      }
+    }
+    /* Landscape / wide: camera left, slideshow right */
+    @media (min-aspect-ratio: 1/1) {
+      .demo { flex-direction: row; }
+      .demo-pane + .demo-pane {
+        border-top: none;
+        border-left: 2px solid rgba(255, 255, 255, 0.12);
+      }
     }
   </style>
 </head>
