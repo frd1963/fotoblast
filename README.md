@@ -100,7 +100,7 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `transitions` | — | Comma-separated transition ids, `all`, or `none` | none selected (instant cut) |
 | `qr` | `qrShow` | `1`/`0`, `true`/`false`, `on`/`off` | `true` |
 | `qrCorner` | — | `tl`, `tr`, `bl`, `br` | `bl` |
-| `qrSize` | — | `small`, `medium`, `large` | `medium` |
+| `qrSize` | — | `smallest`, `small`, `medium`, `large` | `smallest` (adapts to screen; minimum reliably scannable size) |
 | `qrBrandImage` | — | `none`, `fotoblast`, `custom` | `fotoblast` |
 | `qrBrand` | `qrLabel` | Text, max 48 chars | `FotoBlast` |
 | `showEventName` | `eventName` | `1`/`0`, `true`/`false` | `false` (shows `EVENT_NAME` at top when enabled) |

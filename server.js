@@ -2449,9 +2449,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       font-size: 0.75rem;
       color: #e2e8f0;
     }
+    #qrOverlay.size-smallest .qr-card { width: auto; }
     #qrOverlay.size-small .qr-card { width: 9.5rem; }
     #qrOverlay.size-medium .qr-card { width: 13rem; }
     #qrOverlay.size-large .qr-card { width: 17.5rem; }
+    #qrOverlay.size-smallest #qrLabel { font-size: 0.72rem; }
     #qrOverlay.size-small #qrLabel { font-size: 0.8rem; }
     #qrOverlay.size-medium #qrLabel { font-size: 0.95rem; }
     #qrOverlay.size-large #qrLabel { font-size: 1.1rem; }
@@ -2635,7 +2637,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     <p id="fsHintTitle">Your browser blocked automatic fullscreen.</p>
     <button type="button" id="fsHintFullscreenBtn" class="menu-btn">Fullscreen</button>
   </div>
-  <div id="qrOverlay" class="pos-bl size-medium" hidden>
+  <div id="qrOverlay" class="pos-bl size-smallest" hidden>
     <div class="qr-card">
       <div class="qr-frame">
         <canvas id="qrCanvas" aria-label="QR code to open Camera UI"></canvas>
@@ -2756,8 +2758,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
             </select>
             <label for="qrSize">Size</label>
             <select id="qrSize">
+              <option value="smallest" selected>Smallest (readable)</option>
               <option value="small">Small</option>
-              <option value="medium" selected>Medium</option>
+              <option value="medium">Medium</option>
               <option value="large">Large</option>
             </select>
             <label for="qrBrandImage">Brand image</label>
@@ -2881,7 +2884,15 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const QR_DEFAULT_ICON = '${prefixedPath('/favicon-96x96.png')}';
     const QR_MARK_RATIO = 0.22;
     const QR_PIXEL = { small: 120, medium: 176, large: 240 };
+    // Smallest: keep each QR module ≥4 device pixels (phone-camera floor) and
+    // at least ~6.5% of the short viewport side for typical viewing distance.
+    const QR_SMALLEST_MODULES = 41;
+    const QR_SMALLEST_DEVICE_PX_PER_MODULE = 4;
+    const QR_SMALLEST_VIEWPORT_FRACTION = 0.065;
+    const QR_SMALLEST_CSS_FLOOR = 64;
+    const QR_SMALLEST_CSS_CAP = 148; // stay under fixed "small" (~9.5rem)
     let qrBrandObjectUrl = null;
+    let lastQrRenderPx = 0;
 
     let photos = [];
     let index = 0;
@@ -2945,7 +2956,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       bl: 'bottom left',
       br: 'bottom right',
     };
-    const QR_SIZE_VALUES = new Set(['small', 'medium', 'large']);
+    const QR_SIZE_VALUES = new Set(['smallest', 'small', 'medium', 'large']);
     const QR_BRAND_IMAGE_VALUES = new Set(['none', 'fotoblast', 'custom']);
     const TRANSITION_VALUE_SET = new Set(TRANSITION_OPTIONS.map((o) => o.value));
 
@@ -3973,6 +3984,40 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
     }
 
+    function getSmallestQrCssPx() {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const shortSide = Math.min(window.innerWidth, window.innerHeight);
+      const moduleFloor = Math.ceil(
+        (QR_SMALLEST_MODULES * QR_SMALLEST_DEVICE_PX_PER_MODULE) / dpr,
+      );
+      const viewportFloor = Math.round(shortSide * QR_SMALLEST_VIEWPORT_FRACTION);
+      return Math.min(
+        QR_SMALLEST_CSS_CAP,
+        Math.max(QR_SMALLEST_CSS_FLOOR, moduleFloor, viewportFloor),
+      );
+    }
+
+    function getQrDisplayCssPx() {
+      if (qrSize.value === 'smallest') return getSmallestQrCssPx();
+      return QR_PIXEL[qrSize.value] || QR_PIXEL.medium;
+    }
+
+    function getQrRenderPx() {
+      const cssPx = getQrDisplayCssPx();
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      return Math.min(512, Math.max(64, Math.round(cssPx * dpr)));
+    }
+
+    function applyQrCardSize() {
+      const card = qrOverlay.querySelector('.qr-card');
+      if (!card) return;
+      if (qrSize.value === 'smallest') {
+        card.style.width = getSmallestQrCssPx() + 'px';
+      } else {
+        card.style.width = '';
+      }
+    }
+
     function applyQrChrome() {
       const on = qrShow.checked;
       qrOptions.classList.toggle('disabled', !on);
@@ -3982,6 +4027,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
       qrOverlay.hidden = false;
       qrOverlay.className = 'pos-' + qrCorner.value + ' size-' + qrSize.value;
+      applyQrCardSize();
     }
 
     function buildQrImageUrl(px, withLogo) {
@@ -3998,7 +4044,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       if (!qrShow.checked) return;
 
       qrLabel.textContent = getQrBrandLabel();
-      const px = QR_PIXEL[qrSize.value] || QR_PIXEL.medium;
+      const px = getQrRenderPx();
+      lastQrRenderPx = px;
       const markSrc = getQrMarkSrc();
       const qrSrc = buildQrImageUrl(px, !!markSrc);
 
@@ -4011,6 +4058,17 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         }
       } catch (_) {
         qrLabel.textContent = 'Could not load QR';
+      }
+    }
+
+    let qrResizeTimer = null;
+    function onQrViewportChange() {
+      if (!qrShow.checked || qrSize.value !== 'smallest') return;
+      applyQrCardSize();
+      const nextPx = getQrRenderPx();
+      if (nextPx !== lastQrRenderPx) {
+        clearTimeout(qrResizeTimer);
+        qrResizeTimer = setTimeout(() => { void updateQrOverlay(); }, 200);
       }
     }
 
@@ -4305,7 +4363,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     fullscreenBtn.addEventListener('click', () => { void toggleFullscreen(); });
     qrShow.addEventListener('change', () => { scheduleMenuHide(); updateQrPickerSummary(); void updateQrOverlay(); });
     qrCorner.addEventListener('change', () => { scheduleMenuHide(); updateQrPickerSummary(); void updateQrOverlay(); });
-    qrSize.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
+    qrSize.addEventListener('change', () => { scheduleMenuHide(); updateQrPickerSummary(); void updateQrOverlay(); });
+    window.addEventListener('resize', onQrViewportChange);
+    window.addEventListener('orientationchange', onQrViewportChange);
     qrBrandImage.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrand.addEventListener('input', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrandFile.addEventListener('change', () => {
