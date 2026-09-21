@@ -2016,10 +2016,12 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
     #eventTitleBanner {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
+      top: calc(var(--event-pos-y, 5) * 1%);
+      left: calc(var(--event-pos-x, 50) * 1%);
+      right: auto;
       z-index: 17;
+      width: max-content;
+      max-width: 100vw;
       padding: 0.85rem 0;
       text-align: center;
       font-size: var(--event-title-size, 6vh);
@@ -2030,17 +2032,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       pointer-events: none;
       background: transparent;
       overflow: visible;
-    }
-    #eventTitleBanner::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: min(7rem, 18vh);
-      background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
-      pointer-events: none;
-      z-index: -1;
+      box-sizing: border-box;
+      transform: translate(-50%, calc(var(--event-pos-y, 5) * -1%));
     }
     #eventTitleBanner[hidden] { display: none !important; }
     #eventTitleBanner .event-title-track {
@@ -2056,28 +2049,73 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       z-index: 1;
     }
     #eventTitleBanner.shadow .event-title-text {
-      text-shadow:
-        var(--event-shadow-x, 1px) var(--event-shadow-y, 2px) var(--event-shadow-blur, 2px) rgba(0, 0, 0, 0.8);
+      /* drop-shadow paints behind the full glyph (fill + outline stroke) */
+      filter: drop-shadow(
+        var(--event-shadow-x, 0px)
+        var(--event-shadow-y, 4px)
+        var(--event-shadow-blur, 2px)
+        rgba(0, 0, 0, 0.8)
+      );
+    }
+    #eventTitleBanner.outline .event-title-text {
+      -webkit-text-stroke: var(--event-outline-width, 1px) var(--event-outline-color, #000000);
+      paint-order: stroke fill;
     }
     #eventTitleBanner.scroll {
-      text-align: left;
-      overflow-x: hidden;
-      overflow-y: visible;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      height: auto;
+      max-width: none;
+      text-align: center;
+      transform: none;
+      overflow: hidden;
+      padding: 0 !important;
     }
     #eventTitleBanner.scroll .event-title-track {
+      position: absolute;
+      top: calc(var(--event-pos-y, 5) * 1%);
+      left: calc(var(--event-pos-x, 50) * 1%);
       display: block;
       width: max-content;
       max-width: none;
       padding: 0;
       will-change: transform;
-      animation: event-title-scroll var(--event-scroll-duration, 18s) linear infinite;
     }
     #eventTitleBanner.scroll .event-title-text {
+      position: relative;
+      display: inline-block;
       padding: 0;
+      white-space: nowrap;
     }
-    @keyframes event-title-scroll {
-      from { transform: translateX(100vw); }
-      to { transform: translateX(-100%); }
+    #eventTitleBanner.scroll .event-title-text-clone {
+      position: absolute;
+      left: 0;
+      top: 0;
+      margin: 0;
+    }
+    #eventTitleBanner:not(.scroll) .event-title-text-clone,
+    #eventTitleBanner.scroll:not(.wrap) .event-title-text-clone {
+      display: none !important;
+    }
+    #eventTitleBanner.scroll.wrap .event-title-text-clone {
+      display: inline-block;
+    }
+    .event-name-options .check-row-pair {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.85rem 1.25rem;
+      margin: 0.45rem 0 0;
+    }
+    .event-name-options .check-row-pair .check-row {
+      margin: 0;
+    }
+    .event-name-options .check-row-pair .check-row.disabled {
+      opacity: 0.4;
+      pointer-events: none;
     }
     .event-name-options.disabled { opacity: 0.45; pointer-events: none; }
     .ken-burns-options.disabled { opacity: 0.45; pointer-events: none; }
@@ -2162,8 +2200,195 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       opacity: 0.4;
       pointer-events: none;
     }
+    .event-name-options .field.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+    }
     .event-name-options input[type="range"] {
       width: 100%;
+    }
+    .event-name-options input[type="range"].range-vertical {
+      width: 1.75rem;
+      height: 6.5rem;
+      padding: 0;
+      margin: 0.3rem auto 0;
+      writing-mode: vertical-lr;
+      direction: rtl;
+      -webkit-appearance: slider-vertical;
+      appearance: slider-vertical;
+      /* Flip so low values sit at the top (matches screen Y). */
+      transform: scaleY(-1);
+    }
+    .event-name-pos {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.35rem;
+      margin: 0.35rem 0 0.15rem;
+    }
+    .event-name-pos .field {
+      margin: 0;
+    }
+    .event-name-pos-y {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      align-self: center;
+      min-width: 3.25rem;
+    }
+    .event-name-pos-y label {
+      text-align: center;
+      margin-top: 0;
+      line-height: 1.25;
+    }
+    .event-name-colors {
+      display: flex;
+      gap: 1rem;
+      align-items: flex-end;
+      margin: 0.35rem 0 0.15rem;
+    }
+    .event-name-colors .color-field {
+      flex: 1;
+      min-width: 0;
+    }
+    .event-name-colors .color-field label {
+      margin-top: 0.35rem;
+    }
+    .event-name-colors input[type="color"] {
+      display: block;
+      width: 100%;
+      height: 2.25rem;
+      padding: 0.15rem;
+      border: 1px solid #475569;
+      border-radius: 8px;
+      background: #1e293b;
+      cursor: pointer;
+    }
+    .shadow-dir-dial {
+      width: 5.5rem;
+      height: 5.5rem;
+      margin: 0.35rem auto 0.15rem;
+      border-radius: 50%;
+      border: 1px solid #475569;
+      background:
+        radial-gradient(circle at center, #1e293b 0 28%, transparent 29%),
+        conic-gradient(from 0deg, #334155, #1e293b, #334155, #1e293b, #334155);
+      position: relative;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+      --dir-deg: 90deg;
+    }
+    .shadow-dir-dial:active { cursor: grabbing; }
+    .shadow-dir-dial:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+    }
+    .shadow-dir-dial-face {
+      position: absolute;
+      inset: 0.35rem;
+      border-radius: 50%;
+      border: 1px solid #64748b;
+      background: #0f172a;
+    }
+    .shadow-dir-dial-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 0.7rem;
+      height: 0.7rem;
+      margin: -0.35rem 0 0 -0.35rem;
+      border-radius: 50%;
+      background: #818cf8;
+      border: 2px solid #e2e8f0;
+      box-shadow: 0 0 0 1px #312e81;
+      transform: rotate(var(--dir-deg, 90deg)) translateX(1.7rem);
+      transform-origin: center center;
+      pointer-events: none;
+    }
+    .shadow-dir-dial-arm {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 1.7rem;
+      height: 2px;
+      margin-top: -1px;
+      background: linear-gradient(to right, #6366f1, #a5b4fc);
+      border-radius: 1px;
+      transform: rotate(var(--dir-deg, 90deg));
+      transform-origin: left center;
+      pointer-events: none;
+    }
+    .event-name-dials {
+      display: flex;
+      justify-content: center;
+      gap: 1.25rem;
+      margin: 0.35rem 0 0.15rem;
+    }
+    .event-name-dials .field {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .event-name-dials label {
+      text-align: center;
+      margin-top: 0;
+    }
+    .scroll-dir-dial .shadow-dir-dial-knob {
+      background: #34d399;
+      box-shadow: 0 0 0 1px #065f46;
+    }
+    .scroll-dir-dial .shadow-dir-dial-arm {
+      background: linear-gradient(to right, #059669, #6ee7b7);
+    }
+    .scroll-dir-dial:focus-visible {
+      outline-color: #10b981;
+    }
+    .dir-dial-with-presets {
+      position: relative;
+      width: 7.4rem;
+      height: 7.4rem;
+      margin: 0.15rem auto 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dir-dial-with-presets .shadow-dir-dial {
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .dir-dial-preset {
+      position: absolute;
+      z-index: 2;
+      width: 1.4rem;
+      height: 1.4rem;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 0.75rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dir-dial-preset:hover {
+      background: #243247;
+      border-color: #64748b;
+    }
+    .dir-dial-preset[data-deg="270"] { top: 0; left: 50%; transform: translateX(-50%); }
+    .dir-dial-preset[data-deg="90"] { bottom: 0; left: 50%; transform: translateX(-50%); }
+    .dir-dial-preset[data-deg="180"] { left: 0; top: 50%; transform: translateY(-50%); }
+    .dir-dial-preset[data-deg="0"] { right: 0; top: 50%; transform: translateY(-50%); }
+    .dir-dial-preset.active {
+      background: #059669;
+      border-color: #10b981;
+      color: #fff;
     }
     .font-picker {
       position: relative;
@@ -2742,6 +2967,18 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       </button>
     </div>
     <div class="field">
+      <label for="textPickerBtn">Text</label>
+      <div class="qr-menu-row">
+        <label class="qr-show-toggle check-row" for="showEventName" aria-label="Show text">
+          <input type="checkbox" id="showEventName">
+        </label>
+        <button type="button" id="textPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
+          <span id="textPickerSummary">Hidden</span>
+          <span class="transition-picker-chevron" aria-hidden="true">▾</span>
+        </button>
+      </div>
+    </div>
+    <div class="field">
       <label for="transitionPickerBtn">Transitions</label>
       <button type="button" id="transitionPickerBtn" class="transition-picker-btn" aria-expanded="false" aria-haspopup="dialog">
         <span id="transitionPickerSummary">None — instant cut</span>
@@ -2798,13 +3035,23 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
               <label for="kbDirDown" title="Down"><input type="checkbox" id="kbDirDown" value="down"><span aria-hidden="true">↓</span></label>
               <label for="kbDirDownRight" title="Down right"><input type="checkbox" id="kbDirDownRight" value="down-right"><span aria-hidden="true">↘</span></label>
             </div>
-            <p class="ken-burns-hint">Leave directions unchecked to auto-pick a path from each photo’s aspect ratio. Center toggles progressive zoom-in. Path spans transition in + display + transition out.</p>
+            <p class="ken-burns-hint">Leave directions unchecked to auto-pick a path from each photo’s aspect ratio. Center toggles progressive zoom-in.</p>
           </div>
-          <label class="check-row" for="showEventName">
-            <input type="checkbox" id="showEventName">
-            Show event name
-          </label>
+        </div>
+      </div>
+    </div>
+    <div id="textSettingsOverlay" class="transition-overlay" hidden>
+      <div class="transition-sheet" role="dialog" aria-modal="true" aria-labelledby="textSheetTitle">
+        <div class="transition-sheet-head">
+          <h3 id="textSheetTitle">Text</h3>
+          <button type="button" id="textCloseBtn" class="transition-close-btn" aria-label="Close">×</button>
+        </div>
+        <div class="transition-sheet-body">
           <div class="event-name-options disabled" id="eventNameOptions">
+            <div class="field">
+              <label for="eventNameText">Text</label>
+              <input type="text" id="eventNameText" value="${escapeHtml(EVENT_NAME_DISPLAY)}" maxlength="120" autocomplete="off" placeholder="Event name">
+            </div>
             <label id="eventNameFontLabelTitle">Font</label>
             <div class="font-picker" id="eventNameFontPicker">
               <input type="hidden" id="eventNameFont" value="system">
@@ -2818,8 +3065,34 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
               <label for="eventNameSize">Text size <span id="eventNameSizeVal">6%</span></label>
               <input type="range" id="eventNameSize" min="2" max="100" step="1" value="6">
             </div>
-            <label for="eventNameColor">Text color</label>
-            <input type="color" id="eventNameColor" value="#f8fafc">
+            <div class="event-name-pos" id="eventNamePosWrap">
+              <div class="field event-name-pos-x">
+                <label for="eventNamePosX">Horizontal <span id="eventNamePosXVal">50%</span></label>
+                <input type="range" id="eventNamePosX" min="0" max="100" step="1" value="50">
+              </div>
+              <div class="field event-name-pos-y">
+                <label for="eventNamePosY">Vertical <span id="eventNamePosYVal">5%</span></label>
+                <input type="range" id="eventNamePosY" class="range-vertical" min="0" max="100" step="1" value="5" orient="vertical" aria-orientation="vertical">
+              </div>
+            </div>
+            <div class="event-name-colors">
+              <div class="color-field">
+                <label for="eventNameColor">Text color</label>
+                <input type="color" id="eventNameColor" value="#f8fafc">
+              </div>
+              <div class="color-field">
+                <label for="eventNameOutlineColor">Outline color</label>
+                <input type="color" id="eventNameOutlineColor" value="#000000">
+              </div>
+            </div>
+            <label class="check-row" for="eventNameOutline">
+              <input type="checkbox" id="eventNameOutline">
+              Text outline
+            </label>
+            <div class="field sub-option disabled" id="eventNameOutlineSizeWrap">
+              <label for="eventNameOutlineSize">Outline size <span id="eventNameOutlineSizeVal">2px</span></label>
+              <input type="range" id="eventNameOutlineSize" min="1" max="16" step="1" value="2">
+            </div>
             <label class="check-row" for="eventNameShadow">
               <input type="checkbox" id="eventNameShadow" checked>
               Drop shadow
@@ -2832,10 +3105,64 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
               <label for="eventNameShadowBlur">Shadow blur <span id="eventNameShadowBlurVal">2px</span></label>
               <input type="range" id="eventNameShadowBlur" min="0" max="24" step="1" value="2">
             </div>
-            <label class="check-row" for="eventNameScroll">
-              <input type="checkbox" id="eventNameScroll">
-              Scroll
-            </label>
+            <div class="event-name-dials">
+              <div class="field sub-option" id="eventNameShadowDirWrap">
+                <label id="eventNameShadowDirLabel">Shadow direction <span id="eventNameShadowDirVal">90°</span></label>
+                <div
+                  class="shadow-dir-dial"
+                  id="eventNameShadowDirDial"
+                  role="slider"
+                  tabindex="0"
+                  aria-valuemin="0"
+                  aria-valuemax="359"
+                  aria-valuenow="90"
+                  aria-valuetext="90 degrees"
+                  aria-labelledby="eventNameShadowDirLabel"
+                >
+                  <input type="hidden" id="eventNameShadowDir" value="90">
+                  <div class="shadow-dir-dial-face" aria-hidden="true">
+                    <div class="shadow-dir-dial-arm"></div>
+                    <div class="shadow-dir-dial-knob"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field sub-option disabled" id="eventNameScrollDirWrap">
+                <label id="eventNameScrollDirLabel">Scroll direction <span id="eventNameScrollDirVal">180°</span></label>
+                <div class="dir-dial-with-presets" id="eventNameScrollDirPresets">
+                  <button type="button" class="dir-dial-preset" data-deg="270" title="Up" aria-label="Scroll up">↑</button>
+                  <button type="button" class="dir-dial-preset" data-deg="0" title="Right" aria-label="Scroll right">→</button>
+                  <button type="button" class="dir-dial-preset" data-deg="90" title="Down" aria-label="Scroll down">↓</button>
+                  <button type="button" class="dir-dial-preset" data-deg="180" title="Left" aria-label="Scroll left">←</button>
+                  <div
+                    class="shadow-dir-dial scroll-dir-dial"
+                    id="eventNameScrollDirDial"
+                    role="slider"
+                    tabindex="0"
+                    aria-valuemin="0"
+                    aria-valuemax="359"
+                    aria-valuenow="180"
+                    aria-valuetext="180 degrees"
+                    aria-labelledby="eventNameScrollDirLabel"
+                  >
+                    <input type="hidden" id="eventNameScrollDir" value="180">
+                    <div class="shadow-dir-dial-face" aria-hidden="true">
+                      <div class="shadow-dir-dial-arm"></div>
+                      <div class="shadow-dir-dial-knob"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="check-row-pair">
+              <label class="check-row" for="eventNameScroll">
+                <input type="checkbox" id="eventNameScroll">
+                Scroll
+              </label>
+              <label class="check-row disabled" for="eventNameWrap" id="eventNameWrapLabel">
+                <input type="checkbox" id="eventNameWrap" checked disabled>
+                Wrap
+              </label>
+            </div>
             <div class="field sub-option disabled" id="eventNameScrollSpeedWrap">
               <label for="eventNameScrollSpeed">Scroll speed <span id="eventNameScrollSpeedVal">5</span></label>
               <input type="range" id="eventNameScrollSpeed" min="1" max="10" step="1" value="5">
@@ -2946,6 +3273,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     };
     const showEventName = document.getElementById('showEventName');
     const eventNameOptions = document.getElementById('eventNameOptions');
+    const eventNameText = document.getElementById('eventNameText');
     const eventNameFont = document.getElementById('eventNameFont');
     const eventNameFontBtn = document.getElementById('eventNameFontBtn');
     const eventNameFontLabel = document.getElementById('eventNameFontLabel');
@@ -2953,7 +3281,16 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const eventNameFontPicker = document.getElementById('eventNameFontPicker');
     const eventNameSize = document.getElementById('eventNameSize');
     const eventNameSizeVal = document.getElementById('eventNameSizeVal');
+    const eventNamePosX = document.getElementById('eventNamePosX');
+    const eventNamePosXVal = document.getElementById('eventNamePosXVal');
+    const eventNamePosY = document.getElementById('eventNamePosY');
+    const eventNamePosYVal = document.getElementById('eventNamePosYVal');
     const eventNameColor = document.getElementById('eventNameColor');
+    const eventNameOutline = document.getElementById('eventNameOutline');
+    const eventNameOutlineColor = document.getElementById('eventNameOutlineColor');
+    const eventNameOutlineSize = document.getElementById('eventNameOutlineSize');
+    const eventNameOutlineSizeVal = document.getElementById('eventNameOutlineSizeVal');
+    const eventNameOutlineSizeWrap = document.getElementById('eventNameOutlineSizeWrap');
     const eventNameShadow = document.getElementById('eventNameShadow');
     const eventNameShadowDist = document.getElementById('eventNameShadowDist');
     const eventNameShadowDistVal = document.getElementById('eventNameShadowDistVal');
@@ -2961,18 +3298,42 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const eventNameShadowBlur = document.getElementById('eventNameShadowBlur');
     const eventNameShadowBlurVal = document.getElementById('eventNameShadowBlurVal');
     const eventNameShadowBlurWrap = document.getElementById('eventNameShadowBlurWrap');
+    const eventNameShadowDir = document.getElementById('eventNameShadowDir');
+    const eventNameShadowDirDial = document.getElementById('eventNameShadowDirDial');
+    const eventNameShadowDirVal = document.getElementById('eventNameShadowDirVal');
+    const eventNameShadowDirWrap = document.getElementById('eventNameShadowDirWrap');
     const eventNameScroll = document.getElementById('eventNameScroll');
+    const eventNameWrap = document.getElementById('eventNameWrap');
+    const eventNameWrapLabel = document.getElementById('eventNameWrapLabel');
+    const eventNameScrollDir = document.getElementById('eventNameScrollDir');
+    const eventNameScrollDirDial = document.getElementById('eventNameScrollDirDial');
+    const eventNameScrollDirVal = document.getElementById('eventNameScrollDirVal');
+    const eventNameScrollDirWrap = document.getElementById('eventNameScrollDirWrap');
+    const eventNameScrollDirPresets = document.getElementById('eventNameScrollDirPresets');
     const eventNameScrollSpeed = document.getElementById('eventNameScrollSpeed');
     const eventNameScrollSpeedVal = document.getElementById('eventNameScrollSpeedVal');
     const eventNameScrollSpeedWrap = document.getElementById('eventNameScrollSpeedWrap');
     let eventTitleScrollActive = false;
     let eventTitleScrollDurationSec = null;
+    let eventTitleScrollDirDeg = null;
+    let eventTitleScrollPxPerSec = null;
+    let eventTitleScrollLayoutKey = null;
+    let eventTitleScrollWrap = null;
+    let eventTitleScrollAnim = null;
+    let eventTitleScrollRaf = null;
+    let eventTitleScrollState = null;
+    let shadowDirDragging = false;
+    let scrollDirDragging = false;
     const eventTitleBanner = document.getElementById('eventTitleBanner');
     const eventNameEl = document.getElementById('eventName');
     const settingsPickerBtn = document.getElementById('settingsPickerBtn');
     const settingsPickerSummary = document.getElementById('settingsPickerSummary');
     const settingsOverlay = document.getElementById('settingsOverlay');
     const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+    const textPickerBtn = document.getElementById('textPickerBtn');
+    const textPickerSummary = document.getElementById('textPickerSummary');
+    const textSettingsOverlay = document.getElementById('textSettingsOverlay');
+    const textCloseBtn = document.getElementById('textCloseBtn');
     const copyShareUrlBtn = document.getElementById('copyShareUrlBtn');
     const transitionPickerBtn = document.getElementById('transitionPickerBtn');
     const transitionOverlay = document.getElementById('transitionOverlay');
@@ -3242,8 +3603,12 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const EVENT_NAME_FONT_VALUES = new Set(EVENT_NAME_FONT_OPTIONS.map((f) => f.value));
     const EVENT_NAME_SIZE_LEGACY = { small: 4, medium: 6, large: 12, xlarge: 20 };
 
+    function getEventNameSizeMinVh() {
+      return isDemoEvent() ? 5 : 2;
+    }
+
     function getEventNameSizeVh() {
-      return clampQueryNumber(eventNameSize.value, 2, 100, 6, 1);
+      return clampQueryNumber(eventNameSize.value, getEventNameSizeMinVh(), 100, 6, 1);
     }
 
     function parseQueryBool(raw, fallback) {
@@ -3331,8 +3696,13 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
 
       const eventNameRaw = params.get('showEventName') ?? params.get('eventName');
-      if (eventNameRaw !== null && !showEventName.disabled) {
+      if (eventNameRaw !== null) {
         showEventName.checked = parseQueryBool(eventNameRaw, showEventName.checked);
+      }
+
+      const textRaw = params.get('eventNameText') ?? params.get('bannerText');
+      if (textRaw !== null) {
+        eventNameText.value = String(textRaw).slice(0, 120);
       }
 
       const fontRaw = params.get('eventNameFont') ?? params.get('bannerFont');
@@ -3342,16 +3712,48 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
       const sizeRaw = params.get('eventNameSize') ?? params.get('bannerSize');
       if (sizeRaw !== null) {
+        const minVh = getEventNameSizeMinVh();
         if (EVENT_NAME_SIZE_LEGACY[sizeRaw] != null) {
-          eventNameSize.value = String(EVENT_NAME_SIZE_LEGACY[sizeRaw]);
+          eventNameSize.value = String(Math.max(minVh, EVENT_NAME_SIZE_LEGACY[sizeRaw]));
         } else {
-          eventNameSize.value = String(clampQueryNumber(sizeRaw, 2, 100, Number(eventNameSize.value), 1));
+          eventNameSize.value = String(clampQueryNumber(sizeRaw, minVh, 100, Number(eventNameSize.value), 1));
         }
+      }
+
+      const posXRaw = params.get('eventNamePosX') ?? params.get('bannerPosX');
+      if (posXRaw !== null) {
+        eventNamePosX.value = String(
+          clampQueryNumber(posXRaw, 0, 100, Number(eventNamePosX.value), 1),
+        );
+      }
+
+      const posYRaw = params.get('eventNamePosY') ?? params.get('bannerPosY');
+      if (posYRaw !== null) {
+        eventNamePosY.value = String(
+          clampQueryNumber(posYRaw, 0, 100, Number(eventNamePosY.value), 1),
+        );
       }
 
       const colorRaw = params.get('eventNameColor') ?? params.get('bannerColor');
       if (colorRaw !== null && /^#[0-9a-fA-F]{6}$/.test(colorRaw)) {
         eventNameColor.value = colorRaw.toLowerCase();
+      }
+
+      const outlineRaw = params.get('eventNameOutline') ?? params.get('bannerOutline');
+      if (outlineRaw !== null) {
+        eventNameOutline.checked = parseQueryBool(outlineRaw, eventNameOutline.checked);
+      }
+
+      const outlineColorRaw = params.get('eventNameOutlineColor') ?? params.get('bannerOutlineColor');
+      if (outlineColorRaw !== null && /^#[0-9a-fA-F]{6}$/.test(outlineColorRaw)) {
+        eventNameOutlineColor.value = outlineColorRaw.toLowerCase();
+      }
+
+      const outlineSizeRaw = params.get('eventNameOutlineSize') ?? params.get('bannerOutlineSize');
+      if (outlineSizeRaw !== null) {
+        eventNameOutlineSize.value = String(
+          clampQueryNumber(outlineSizeRaw, 1, 16, Number(eventNameOutlineSize.value), 1),
+        );
       }
 
       const shadowRaw = params.get('eventNameShadow') ?? params.get('bannerShadow');
@@ -3373,9 +3775,29 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         );
       }
 
+      const shadowDirRaw = params.get('eventNameShadowDir') ?? params.get('bannerShadowDir');
+      if (shadowDirRaw !== null) {
+        setShadowDirDegrees(
+          clampQueryNumber(shadowDirRaw, 0, 359, Number(eventNameShadowDir.value) || 90, 1),
+          false,
+        );
+      }
+
       const scrollRaw = params.get('eventNameScroll') ?? params.get('bannerScroll');
       if (scrollRaw !== null) {
         eventNameScroll.checked = parseQueryBool(scrollRaw, eventNameScroll.checked);
+      }
+      const wrapRaw = params.get('eventNameWrap') ?? params.get('bannerWrap');
+      if (wrapRaw !== null) {
+        eventNameWrap.checked = parseQueryBool(wrapRaw, eventNameWrap.checked);
+      }
+
+      const scrollDirRaw = params.get('eventNameScrollDir') ?? params.get('bannerScrollDir');
+      if (scrollDirRaw !== null) {
+        setScrollDirDegrees(
+          clampQueryNumber(scrollDirRaw, 0, 359, Number(eventNameScrollDir.value) || 180, 1),
+          false,
+        );
       }
 
       const scrollSpeedRaw = params.get('eventNameScrollSpeed') ?? params.get('bannerScrollSpeed');
@@ -3444,13 +3866,22 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       params.set('qrBrandImage', qrBrandImage.value);
       params.set('qrBrand', getQrBrandLabel());
       params.set('showEventName', showEventName.checked ? '1' : '0');
+      params.set('eventNameText', eventNameText.value);
       params.set('eventNameFont', eventNameFont.value);
       params.set('eventNameSize', String(getEventNameSizeVh()));
+      params.set('eventNamePosX', eventNamePosX.value);
+      params.set('eventNamePosY', eventNamePosY.value);
       params.set('eventNameColor', eventNameColor.value);
+      params.set('eventNameOutline', eventNameOutline.checked ? '1' : '0');
+      params.set('eventNameOutlineColor', eventNameOutlineColor.value);
+      params.set('eventNameOutlineSize', eventNameOutlineSize.value);
       params.set('eventNameShadow', eventNameShadow.checked ? '1' : '0');
       params.set('eventNameShadowDist', eventNameShadowDist.value);
       params.set('eventNameShadowBlur', eventNameShadowBlur.value);
+      params.set('eventNameShadowDir', eventNameShadowDir.value);
       params.set('eventNameScroll', eventNameScroll.checked ? '1' : '0');
+      params.set('eventNameWrap', eventNameWrap.checked ? '1' : '0');
+      params.set('eventNameScrollDir', eventNameScrollDir.value);
       params.set('eventNameScrollSpeed', eventNameScrollSpeed.value);
       params.set('kenBurns', kenBurns.checked ? '1' : '0');
       params.set('kenBurnsZoom', kenBurnsZoom.checked ? '1' : '0');
@@ -3501,7 +3932,10 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function isSubpanelOpen() {
-      return !settingsOverlay.hidden || !qrSettingsOverlay.hidden || !transitionOverlay.hidden;
+      return !settingsOverlay.hidden
+        || !textSettingsOverlay.hidden
+        || !qrSettingsOverlay.hidden
+        || !transitionOverlay.hidden;
     }
 
     function syncSubpanelMenuState() {
@@ -3518,6 +3952,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         settingsOverlay.hidden = true;
         settingsPickerBtn.setAttribute('aria-expanded', 'false');
       }
+      if (except !== 'text') {
+        textSettingsOverlay.hidden = true;
+        textPickerBtn.setAttribute('aria-expanded', 'false');
+        setEventNameFontMenuOpen(false);
+      }
       if (except !== 'qr') {
         qrSettingsOverlay.hidden = true;
         qrPickerBtn.setAttribute('aria-expanded', 'false');
@@ -3531,9 +3970,16 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function setSettingsPanelOpen(open) {
       if (open) closeOtherSubpanels('settings');
-      else setEventNameFontMenuOpen(false);
       settingsOverlay.hidden = !open;
       settingsPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      syncSubpanelMenuState();
+    }
+
+    function setTextPanelOpen(open) {
+      if (open) closeOtherSubpanels('text');
+      else setEventNameFontMenuOpen(false);
+      textSettingsOverlay.hidden = !open;
+      textPickerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       syncSubpanelMenuState();
     }
 
@@ -3821,13 +4267,206 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         else if (dirs.length < KB_DIRS.length) kb += ' (' + dirs.join(', ') + ')';
         text += kb;
       }
-      if (showEventName.checked && !showEventName.disabled) text += ' · event name';
       settingsPickerSummary.textContent = text;
     }
 
-    function getEventDisplayName() {
+    function updateTextPickerSummary() {
+      if (!showEventName.checked) {
+        textPickerSummary.textContent = 'Hidden';
+        return;
+      }
+      const name = getBannerText();
+      if (!name) {
+        textPickerSummary.textContent = 'On';
+        return;
+      }
+      textPickerSummary.textContent = name.length > 28 ? name.slice(0, 26) + '…' : name;
+    }
+
+    function getEventDefaultName() {
       if (!eventNameEl) return '';
       return (eventNameEl.dataset.eventName || eventNameEl.textContent || '').trim();
+    }
+
+    function getEventSlug() {
+      if (!eventNameEl) return '';
+      return (eventNameEl.dataset.eventSlug || '').trim();
+    }
+
+    function isDemoEvent() {
+      const slug = getEventSlug().toLowerCase();
+      const display = getEventDefaultName().toLowerCase();
+      return slug === 'demo' || display === 'demo';
+    }
+
+    function getBannerText() {
+      if (isDemoEvent()) return getEventDefaultName() || 'demo';
+      return (eventNameText.value || '').trim();
+    }
+
+    function parseCssHexColor(raw) {
+      const s = String(raw || '').trim();
+      if (!/^#[0-9a-fA-F]{6}$/.test(s)) return null;
+      return {
+        r: parseInt(s.slice(1, 3), 16),
+        g: parseInt(s.slice(3, 5), 16),
+        b: parseInt(s.slice(5, 7), 16),
+      };
+    }
+
+    function relativeLuminance(rgb) {
+      if (!rgb) return 0;
+      const lin = (c) => {
+        const v = c / 255;
+        return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+    }
+
+    function contrastRatio(lumA, lumB) {
+      const a = Math.max(lumA, lumB);
+      const b = Math.min(lumA, lumB);
+      return (a + 0.05) / (b + 0.05);
+    }
+
+    const demoSampleCanvas = document.createElement('canvas');
+    demoSampleCanvas.width = 1;
+    demoSampleCanvas.height = 1;
+    const demoSampleCtx = demoSampleCanvas.getContext('2d', { willReadFrequently: true });
+
+    function sampleImageUvRgb(img, u, v) {
+      if (!img || !img.naturalWidth || !img.naturalHeight || !demoSampleCtx) return null;
+      const x = Math.min(img.naturalWidth - 1, Math.max(0, Math.floor(u * (img.naturalWidth - 1))));
+      const y = Math.min(img.naturalHeight - 1, Math.max(0, Math.floor(v * (img.naturalHeight - 1))));
+      try {
+        demoSampleCtx.clearRect(0, 0, 1, 1);
+        demoSampleCtx.drawImage(img, x, y, 1, 1, 0, 0, 1, 1);
+        const d = demoSampleCtx.getImageData(0, 0, 1, 1).data;
+        return { r: d[0], g: d[1], b: d[2] };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function mapStagePointToImageUv(img, stageW, stageH, px, py, cover) {
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      if (!iw || !ih || stageW <= 0 || stageH <= 0) return null;
+      const ir = iw / ih;
+      const sr = stageW / stageH;
+      let dw;
+      let dh;
+      let ox;
+      let oy;
+      if (cover) {
+        if (ir > sr) {
+          dh = stageH;
+          dw = stageH * ir;
+        } else {
+          dw = stageW;
+          dh = stageW / ir;
+        }
+      } else if (ir > sr) {
+        dw = stageW;
+        dh = stageW / ir;
+      } else {
+        dh = stageH;
+        dw = stageH * ir;
+      }
+      ox = (stageW - dw) / 2;
+      oy = (stageH - dh) / 2;
+      const lx = px - ox;
+      const ly = py - oy;
+      if (lx < 0 || ly < 0 || lx > dw || ly > dh) {
+        return { letterbox: true };
+      }
+      return { u: lx / dw, v: ly / dh, letterbox: false };
+    }
+
+    function sampleBackgroundLuminanceBehindText() {
+      const textEl = getPrimaryTitleTextEl();
+      const img = active;
+      if (!textEl || !img || !img.naturalWidth || eventTitleBanner.hidden) return null;
+      const stageRect = stage.getBoundingClientRect();
+      const textRect = textEl.getBoundingClientRect();
+      if (stageRect.width < 2 || stageRect.height < 2 || textRect.width < 1) return null;
+      const cover = img.classList.contains('kb-fit');
+      const samples = [];
+      const points = [
+        [0.5, 0.5],
+        [0.2, 0.5],
+        [0.8, 0.5],
+        [0.5, 0.25],
+        [0.5, 0.75],
+      ];
+      for (const [fx, fy] of points) {
+        const px = textRect.left + textRect.width * fx - stageRect.left;
+        const py = textRect.top + textRect.height * fy - stageRect.top;
+        const mapped = mapStagePointToImageUv(img, stageRect.width, stageRect.height, px, py, cover);
+        if (!mapped) continue;
+        if (mapped.letterbox) {
+          samples.push(0); // stage letterbox is black
+          continue;
+        }
+        const rgb = sampleImageUvRgb(img, mapped.u, mapped.v);
+        if (rgb) samples.push(relativeLuminance(rgb));
+      }
+      if (!samples.length) return null;
+      return samples.reduce((a, b) => a + b, 0) / samples.length;
+    }
+
+    function contrastSafeTextColor(chosenHex) {
+      const chosen = parseCssHexColor(chosenHex) || parseCssHexColor('#f8fafc');
+      const textLum = relativeLuminance(chosen);
+      const bgLum = sampleBackgroundLuminanceBehindText();
+      if (bgLum == null) return chosenHex || '#f8fafc';
+      if (contrastRatio(textLum, bgLum) >= 3) {
+        return (
+          '#' +
+          [chosen.r, chosen.g, chosen.b]
+            .map((n) => n.toString(16).padStart(2, '0'))
+            .join('')
+        );
+      }
+      const whiteC = contrastRatio(1, bgLum);
+      const blackC = contrastRatio(0, bgLum);
+      return whiteC >= blackC ? '#f8fafc' : '#0f172a';
+    }
+
+    let demoContrastTimer = null;
+    function syncDemoContrastWatch() {
+      if (demoContrastTimer) {
+        clearInterval(demoContrastTimer);
+        demoContrastTimer = null;
+      }
+      if (!isDemoEvent() || !showEventName.checked) return;
+      demoContrastTimer = setInterval(() => {
+        if (!isDemoEvent() || !showEventName.checked || eventTitleBanner.hidden) return;
+        const next = contrastSafeTextColor(eventNameColor.value || '#f8fafc');
+        if (eventTitleBanner.style.color !== next) eventTitleBanner.style.color = next;
+      }, 400);
+    }
+
+    function applyDemoTextLocks() {
+      const demo = isDemoEvent();
+      const minVh = getEventNameSizeMinVh();
+      eventNameSize.min = String(minVh);
+      if (Number(eventNameSize.value) < minVh) eventNameSize.value = String(minVh);
+
+      if (!demo) {
+        showEventName.disabled = false;
+        eventNameText.readOnly = false;
+        eventNameText.removeAttribute('aria-readonly');
+        return;
+      }
+
+      showEventName.checked = true;
+      showEventName.disabled = true;
+      const locked = getEventDefaultName() || 'demo';
+      eventNameText.value = locked;
+      eventNameText.readOnly = true;
+      eventNameText.setAttribute('aria-readonly', 'true');
+      eventNameText.placeholder = locked;
     }
 
     function getEventNameFontOption(value) {
@@ -3879,92 +4518,459 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
     }
 
+    function normalizeDirDegrees(deg, fallback) {
+      const n = Number(deg);
+      if (!Number.isFinite(n)) return fallback;
+      return ((Math.round(n) % 360) + 360) % 360;
+    }
+
+    function applyDirDialUi(dial, valueInput, labelEl, deg) {
+      valueInput.value = String(deg);
+      dial.style.setProperty('--dir-deg', deg + 'deg');
+      dial.setAttribute('aria-valuenow', String(deg));
+      dial.setAttribute('aria-valuetext', deg + ' degrees');
+      labelEl.textContent = deg + '°';
+    }
+
+    function dirDegreesFromPointer(dial, clientX, clientY) {
+      const rect = dial.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      // CSS coords: 0° = right, 90° = down
+      let deg = (Math.atan2(clientY - cy, clientX - cx) * 180) / Math.PI;
+      if (deg < 0) deg += 360;
+      return Math.round(deg) % 360;
+    }
+
+    function getShadowDirDegrees() {
+      return normalizeDirDegrees(eventNameShadowDir.value, 90);
+    }
+
+    function setShadowDirDegrees(deg, refreshBanner) {
+      applyDirDialUi(
+        eventNameShadowDirDial,
+        eventNameShadowDir,
+        eventNameShadowDirVal,
+        normalizeDirDegrees(deg, 90),
+      );
+      if (refreshBanner !== false) updateEventTitleBanner();
+    }
+
+    function getScrollDirDegrees() {
+      return normalizeDirDegrees(eventNameScrollDir.value, 180);
+    }
+
+    function setScrollDirDegrees(deg, refreshBanner) {
+      const normalized = normalizeDirDegrees(deg, 180);
+      applyDirDialUi(
+        eventNameScrollDirDial,
+        eventNameScrollDir,
+        eventNameScrollDirVal,
+        normalized,
+      );
+      syncScrollDirPresets(normalized);
+      if (refreshBanner !== false) updateEventTitleBanner();
+    }
+
+    function syncScrollDirPresets(deg) {
+      if (!eventNameScrollDirPresets) return;
+      const current = normalizeDirDegrees(deg, 180);
+      eventNameScrollDirPresets.querySelectorAll('.dir-dial-preset').forEach((btn) => {
+        const preset = Number(btn.dataset.deg);
+        btn.classList.toggle('active', preset === current);
+        btn.setAttribute('aria-pressed', preset === current ? 'true' : 'false');
+      });
+    }
+
+    function wireDirDial(dial, wrap, isDraggingRef, getDeg, setDeg) {
+      dial.addEventListener('pointerdown', (e) => {
+        if (wrap.classList.contains('disabled')) return;
+        e.preventDefault();
+        isDraggingRef.on = true;
+        dial.setPointerCapture(e.pointerId);
+        setDeg(dirDegreesFromPointer(dial, e.clientX, e.clientY));
+        scheduleMenuHide();
+      });
+      dial.addEventListener('pointermove', (e) => {
+        if (!isDraggingRef.on) return;
+        setDeg(dirDegreesFromPointer(dial, e.clientX, e.clientY));
+        scheduleMenuHide();
+      });
+      function endDrag(e) {
+        if (!isDraggingRef.on) return;
+        isDraggingRef.on = false;
+        try { dial.releasePointerCapture(e.pointerId); } catch (_) {}
+      }
+      dial.addEventListener('pointerup', endDrag);
+      dial.addEventListener('pointercancel', endDrag);
+      dial.addEventListener('keydown', (e) => {
+        if (wrap.classList.contains('disabled')) return;
+        let next = getDeg();
+        if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next += 5;
+        else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next -= 5;
+        else if (e.key === 'Home') next = 0;
+        else if (e.key === 'End') next = 180;
+        else return;
+        e.preventDefault();
+        setDeg(next);
+        scheduleMenuHide();
+      });
+    }
+
+    function stopEventTitleScroll(track) {
+      if (eventTitleScrollAnim) {
+        try { eventTitleScrollAnim.cancel(); } catch (_) {}
+        eventTitleScrollAnim = null;
+      }
+      if (eventTitleScrollRaf) {
+        cancelAnimationFrame(eventTitleScrollRaf);
+        eventTitleScrollRaf = null;
+      }
+      eventTitleScrollState = null;
+      if (track) {
+        track.style.animation = '';
+        track.style.animationDelay = '';
+        track.style.transform = '';
+        track.querySelectorAll('.event-title-text-clone').forEach((el) => el.remove());
+      }
+      eventTitleBanner.style.removeProperty('--event-scroll-duration');
+      eventTitleBanner.style.removeProperty('--scroll-dx');
+      eventTitleBanner.style.removeProperty('--scroll-dy');
+      eventTitleScrollActive = false;
+      eventTitleScrollDurationSec = null;
+      eventTitleScrollDirDeg = null;
+      eventTitleScrollPxPerSec = null;
+      eventTitleScrollLayoutKey = null;
+      eventTitleScrollWrap = null;
+    }
+
+    function getPrimaryTitleTextEl(track) {
+      const root = track || eventTitleBanner;
+      return root.querySelector('.event-title-text:not(.event-title-text-clone)');
+    }
+
+    function syncBannerTextContent(name) {
+      eventTitleBanner.querySelectorAll('.event-title-text').forEach((el) => {
+        if (el.textContent !== name) el.textContent = name;
+      });
+    }
+
+    function captureScrollTextPosPercent() {
+      if (eventTitleBanner.hidden) return null;
+      const vw = Math.max(1, window.innerWidth);
+      const vh = Math.max(1, window.innerHeight);
+      const cx0 = vw / 2;
+      const cy0 = vh / 2;
+      let best = null;
+      let bestDist = Infinity;
+      eventTitleBanner.querySelectorAll('.event-title-text').forEach((textEl) => {
+        const rect = textEl.getBoundingClientRect();
+        if (rect.width <= 0 && rect.height <= 0) return;
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        if (cx < -rect.width || cx > vw + rect.width || cy < -rect.height || cy > vh + rect.height) {
+          return;
+        }
+        const d = (cx - cx0) * (cx - cx0) + (cy - cy0) * (cy - cy0);
+        if (d < bestDist) {
+          bestDist = d;
+          best = {
+            x: clampQueryNumber((cx / vw) * 100, 0, 100, 50, 1),
+            y: clampQueryNumber((cy / vh) * 100, 0, 100, 5, 1),
+          };
+        }
+      });
+      return best;
+    }
+
+    function setEventNamePosPercent(x, y) {
+      const posX = clampQueryNumber(x, 0, 100, 50, 1);
+      const posY = clampQueryNumber(y, 0, 100, 5, 1);
+      eventNamePosX.value = String(posX);
+      eventNamePosY.value = String(posY);
+      eventNamePosXVal.textContent = posX + '%';
+      eventNamePosYVal.textContent = posY + '%';
+      eventTitleBanner.style.setProperty('--event-pos-x', String(posX));
+      eventTitleBanner.style.setProperty('--event-pos-y', String(posY));
+      return { x: posX, y: posY };
+    }
+
+    function ensureViewportWrapClones(track, primary, name, vw, vh) {
+      const offsets = [];
+      for (let i = -1; i <= 1; i += 1) {
+        for (let j = -1; j <= 1; j += 1) {
+          if (i === 0 && j === 0) continue;
+          offsets.push([i, j]);
+        }
+      }
+      let clones = Array.from(track.querySelectorAll('.event-title-text-clone'));
+      while (clones.length < offsets.length) {
+        const clone = primary.cloneNode(true);
+        clone.classList.add('event-title-text-clone');
+        clone.setAttribute('aria-hidden', 'true');
+        track.appendChild(clone);
+        clones.push(clone);
+      }
+      while (clones.length > offsets.length) {
+        const extra = clones.pop();
+        if (extra) extra.remove();
+      }
+      clones = Array.from(track.querySelectorAll('.event-title-text-clone'));
+      offsets.forEach(([i, j], idx) => {
+        const clone = clones[idx];
+        if (!clone) return;
+        if (clone.textContent !== name) clone.textContent = name;
+        clone.style.transform = 'translate(' + (i * vw) + 'px,' + (j * vh) + 'px)';
+      });
+    }
+
+    function applyScrollTrackTransform(track, x, y) {
+      track.style.transform = 'translate(-50%, -50%) translate(' + x + 'px,' + y + 'px)';
+    }
+
+    function stabilizeWrapOffset(x, y, vw, vh) {
+      // Torus wrap: fold independently on each axis once past a full viewport.
+      // Clones at ±vw / ±vh keep the straddling edge filled in.
+      while (x > vw) x -= vw;
+      while (x < -vw) x += vw;
+      while (y > vh) y -= vh;
+      while (y < -vh) y += vh;
+      return { x, y };
+    }
+
+    function syncEventTitleScroll(track, scrollDx, scrollDy, pxPerSec, scrollDirDeg, wrap, opts) {
+      const primary = getPrimaryTitleTextEl(track);
+      if (!primary) return;
+      const name = primary.textContent || '';
+
+      void primary.offsetWidth;
+      const tw = Math.max(1, primary.offsetWidth);
+      const th = Math.max(1, primary.offsetHeight);
+      const vw = Math.max(1, window.innerWidth);
+      const vh = Math.max(1, window.innerHeight);
+
+      const resetToAnchor = !!(opts && opts.progress === 0);
+      let preservedX = 0;
+      let preservedY = 0;
+      let preservedProgress = 0;
+      if (!resetToAnchor && eventTitleScrollState && typeof eventTitleScrollState.x === 'number') {
+        preservedX = eventTitleScrollState.x;
+        preservedY = eventTitleScrollState.y;
+      } else if (!resetToAnchor && eventTitleScrollAnim) {
+        const timing = eventTitleScrollAnim.effect && eventTitleScrollAnim.effect.getComputedTiming();
+        const d = timing && timing.duration;
+        if (typeof d === 'number' && d > 0 && Number.isFinite(eventTitleScrollAnim.currentTime)) {
+          preservedProgress = ((eventTitleScrollAnim.currentTime % d) + d) % d / d;
+        }
+      }
+
+      if (eventTitleScrollAnim) {
+        try { eventTitleScrollAnim.cancel(); } catch (_) {}
+        eventTitleScrollAnim = null;
+      }
+      if (eventTitleScrollRaf) {
+        cancelAnimationFrame(eventTitleScrollRaf);
+        eventTitleScrollRaf = null;
+      }
+
+      track.style.animation = 'none';
+      track.style.animationDelay = '';
+
+      if (wrap) {
+        ensureViewportWrapClones(track, primary, name, vw, vh);
+        let x = resetToAnchor ? 0 : preservedX;
+        let y = resetToAnchor ? 0 : preservedY;
+        const stable0 = stabilizeWrapOffset(x, y, vw, vh);
+        x = stable0.x;
+        y = stable0.y;
+        eventTitleScrollState = {
+          x,
+          y,
+          dx: scrollDx,
+          dy: scrollDy,
+          pxPerSec,
+          lastTs: null,
+          vw,
+          vh,
+        };
+        applyScrollTrackTransform(track, x, y);
+        const tick = (ts) => {
+          const state = eventTitleScrollState;
+          if (!state) return;
+          if (state.lastTs == null) state.lastTs = ts;
+          const dt = Math.min(0.064, Math.max(0, (ts - state.lastTs) / 1000));
+          state.lastTs = ts;
+          state.x += state.dx * state.pxPerSec * dt;
+          state.y += state.dy * state.pxPerSec * dt;
+          const stable = stabilizeWrapOffset(state.x, state.y, state.vw, state.vh);
+          state.x = stable.x;
+          state.y = stable.y;
+          applyScrollTrackTransform(track, state.x, state.y);
+          eventTitleScrollRaf = requestAnimationFrame(tick);
+        };
+        eventTitleScrollRaf = requestAnimationFrame(tick);
+        eventTitleBanner.style.setProperty('--event-scroll-duration', '0s');
+        eventTitleScrollDurationSec = null;
+      } else {
+        track.querySelectorAll('.event-title-text-clone').forEach((el) => el.remove());
+        // Non-wrap: travel fully off-screen, then loop (hard jump).
+        const spacing = Math.max(
+          1,
+          Math.hypot(scrollDx * (vw + tw), scrollDy * (vh + th)),
+        );
+        const shiftX = scrollDx * spacing;
+        const shiftY = scrollDy * spacing;
+        const durationMs = Math.max(350, (spacing / Math.max(1, pxPerSec)) * 1000);
+        const progress = resetToAnchor ? 0 : preservedProgress;
+        const from = 'translate(-50%, -50%) translate(0px, 0px)';
+        const to = 'translate(-50%, -50%) translate(' + shiftX + 'px,' + shiftY + 'px)';
+        eventTitleScrollAnim = track.animate(
+          [{ transform: from }, { transform: to }],
+          { duration: durationMs, iterations: Infinity, easing: 'linear' },
+        );
+        eventTitleScrollAnim.currentTime = progress * durationMs;
+        eventTitleBanner.style.setProperty('--event-scroll-duration', (durationMs / 1000).toFixed(2) + 's');
+        eventTitleScrollState = null;
+        eventTitleScrollDurationSec = durationMs / 1000;
+      }
+
+      eventTitleBanner.style.setProperty('--scroll-dx', String(scrollDx));
+      eventTitleBanner.style.setProperty('--scroll-dy', String(scrollDy));
+      eventTitleScrollActive = true;
+      eventTitleScrollDirDeg = scrollDirDeg;
+      eventTitleScrollPxPerSec = pxPerSec;
+      eventTitleScrollWrap = wrap;
+    }
+
     function updateEventTitleBanner() {
-      const name = getEventDisplayName();
-      const canShow = !!name;
-      showEventName.disabled = !canShow;
-      if (!canShow) showEventName.checked = false;
-      eventNameOptions.classList.toggle('disabled', !showEventName.checked || !canShow);
+      applyDemoTextLocks();
+      const name = getBannerText();
+      eventNameOptions.classList.toggle('disabled', !showEventName.checked);
+      if (!eventNameText.value && getEventDefaultName()) {
+        eventNameText.placeholder = getEventDefaultName();
+      }
       syncEventNameFontSelect();
 
+      const outlineOptsDisabled = !eventNameOutline.checked;
+      eventNameOutlineSizeWrap.classList.toggle('disabled', outlineOptsDisabled);
+      eventNameOutlineColor.disabled = outlineOptsDisabled;
       const shadowOptsDisabled = !eventNameShadow.checked;
       eventNameShadowDistWrap.classList.toggle('disabled', shadowOptsDisabled);
       eventNameShadowBlurWrap.classList.toggle('disabled', shadowOptsDisabled);
-      eventNameScrollSpeedWrap.classList.toggle('disabled', !eventNameScroll.checked);
+      eventNameShadowDirWrap.classList.toggle('disabled', shadowOptsDisabled);
+      const scrollOptsDisabled = !eventNameScroll.checked;
+      eventNameScrollSpeedWrap.classList.toggle('disabled', scrollOptsDisabled);
+      eventNameScrollDirWrap.classList.toggle('disabled', scrollOptsDisabled);
+      eventNameWrap.disabled = scrollOptsDisabled;
+      if (eventNameWrapLabel) {
+        eventNameWrapLabel.classList.toggle('disabled', scrollOptsDisabled);
+      }
       eventNameScrollSpeedVal.textContent = eventNameScrollSpeed.value;
       const sizeVh = getEventNameSizeVh();
+      eventNameSize.value = String(sizeVh);
       eventNameSizeVal.textContent = sizeVh + '%';
+      const posX = clampQueryNumber(eventNamePosX.value, 0, 100, 50, 1);
+      const posY = clampQueryNumber(eventNamePosY.value, 0, 100, 5, 1);
+      eventNamePosX.value = String(posX);
+      eventNamePosY.value = String(posY);
+      eventNamePosXVal.textContent = posX + '%';
+      eventNamePosYVal.textContent = posY + '%';
 
-      const textEl = eventTitleBanner.querySelector('.event-title-text');
-      if (textEl && textEl.textContent !== name) textEl.textContent = name;
+      syncBannerTextContent(name);
 
       const stack = EVENT_NAME_FONTS[eventNameFont.value] || EVENT_NAME_FONTS.system;
       const shadowStrength = Math.max(0, Number(eventNameShadowDist.value) || 0);
       const blurStrength = Math.max(0, Number(eventNameShadowBlur.value) || 0);
-      // Scale offset/blur with text size (dial 4 at 6% size ≈ 4px)
+      const outlineStrength = Math.max(1, Number(eventNameOutlineSize.value) || 1);
+      // Scale offset/blur/outline with text size (dial 4 at 6% size ≈ 4px)
       const shadowDist = Math.round(shadowStrength * (sizeVh / 6));
       const shadowBlur = Math.round(blurStrength * (sizeVh / 6));
+      const outlineWidth = Math.max(1, Math.round(outlineStrength * (sizeVh / 6)));
+      const shadowDirDeg = getShadowDirDegrees();
+      const shadowRad = (shadowDirDeg * Math.PI) / 180;
+      const shadowX = Math.round(Math.cos(shadowRad) * shadowDist);
+      const shadowY = Math.round(Math.sin(shadowRad) * shadowDist);
+      const scrollDirDeg = getScrollDirDegrees();
+      const scrollRad = (scrollDirDeg * Math.PI) / 180;
+      const scrollDx = Math.cos(scrollRad);
+      const scrollDy = Math.sin(scrollRad);
       eventNameShadowDistVal.textContent = shadowDist + 'px';
       eventNameShadowBlurVal.textContent = shadowBlur + 'px';
+      eventNameOutlineSizeVal.textContent = outlineWidth + 'px';
+      applyDirDialUi(eventNameShadowDirDial, eventNameShadowDir, eventNameShadowDirVal, shadowDirDeg);
+      applyDirDialUi(eventNameScrollDirDial, eventNameScrollDir, eventNameScrollDirVal, scrollDirDeg);
+      syncScrollDirPresets(scrollDirDeg);
       eventTitleBanner.style.fontFamily = stack;
       eventTitleBanner.style.setProperty('--event-title-size', sizeVh + 'vh');
-      eventTitleBanner.style.color = eventNameColor.value || '#f8fafc';
-      eventTitleBanner.style.setProperty('--event-shadow-x', Math.max(0, Math.round(shadowDist * 0.2)) + 'px');
-      eventTitleBanner.style.setProperty('--event-shadow-y', shadowDist + 'px');
+      eventTitleBanner.style.setProperty('--event-pos-x', String(posX));
+      eventTitleBanner.style.setProperty('--event-pos-y', String(posY));
+      eventTitleBanner.style.color = isDemoEvent()
+        ? contrastSafeTextColor(eventNameColor.value || '#f8fafc')
+        : (eventNameColor.value || '#f8fafc');
+      eventTitleBanner.style.setProperty('--event-shadow-x', shadowX + 'px');
+      eventTitleBanner.style.setProperty('--event-shadow-y', shadowY + 'px');
       eventTitleBanner.style.setProperty('--event-shadow-blur', shadowBlur + 'px');
-      // Leave room below so the shadow isn't clipped
-      const shadowPad = eventNameShadow.checked ? shadowDist + shadowBlur + 6 : 0;
-      eventTitleBanner.style.paddingBottom = Math.max(14, shadowPad) + 'px';
+      eventTitleBanner.style.setProperty('--event-outline-width', outlineWidth + 'px');
+      eventTitleBanner.style.setProperty(
+        '--event-outline-color',
+        eventNameOutlineColor.value || '#000000',
+      );
+      // Leave room so shadow/outline aren't clipped
+      const outlinePad = eventNameOutline.checked ? outlineWidth + 2 : 0;
+      const padX = Math.max(
+        14,
+        outlinePad + (eventNameShadow.checked ? Math.abs(shadowX) + shadowBlur + 4 : 0),
+      );
+      const padTop = Math.max(
+        14,
+        outlinePad + (eventNameShadow.checked ? Math.max(0, -shadowY) + shadowBlur + 4 : 0),
+      );
+      const padBottom = Math.max(
+        14,
+        outlinePad + (eventNameShadow.checked ? Math.max(0, shadowY) + shadowBlur + 4 : 0),
+      );
+      eventTitleBanner.style.paddingTop = eventNameScroll.checked ? '0px' : padTop + 'px';
+      eventTitleBanner.style.paddingBottom = eventNameScroll.checked ? '0px' : padBottom + 'px';
+      eventTitleBanner.style.paddingLeft = eventNameScroll.checked ? '0px' : padX + 'px';
+      eventTitleBanner.style.paddingRight = eventNameScroll.checked ? '0px' : padX + 'px';
       eventTitleBanner.classList.toggle('shadow', eventNameShadow.checked);
+      eventTitleBanner.classList.toggle('outline', eventNameOutline.checked);
       eventTitleBanner.classList.toggle('scroll', eventNameScroll.checked);
+      eventTitleBanner.classList.toggle('wrap', eventNameScroll.checked && eventNameWrap.checked);
 
       const track = eventTitleBanner.querySelector('.event-title-track');
       if (track) {
         const wantScroll = eventNameScroll.checked && !!name;
         if (wantScroll) {
-          const charPx = Math.max(12, (sizeVh / 100) * window.innerHeight * 0.55);
-          const approxPx = Math.max(name.length * charPx, 240);
+          const wantWrap = !!eventNameWrap.checked;
           const speed = Math.max(1, Number(eventNameScrollSpeed.value) || 5);
           // Gentle at 1, brisk at 5, very fast at 10
           const pxPerSec = 50 * Math.pow(1.7, speed - 1);
-          const duration = Math.max(0.35, (window.innerWidth + approxPx) / pxPerSec);
-          const durationChanged = eventTitleScrollDurationSec === null
-            || Math.abs(eventTitleScrollDurationSec - duration) > 0.05;
-          const justEnabled = !eventTitleScrollActive;
+          const layoutKey = name + '|' + sizeVh + '|' + window.innerWidth + '|' + window.innerHeight + '|' + (wantWrap ? 'w' : 'n');
+          const dirChanged = eventTitleScrollDirDeg === null
+            || eventTitleScrollDirDeg !== scrollDirDeg;
+          const justEnabled = !eventTitleScrollActive
+            || (!eventTitleScrollAnim && !eventTitleScrollRaf);
+          const speedChanged = eventTitleScrollPxPerSec == null
+            || Math.abs(eventTitleScrollPxPerSec - pxPerSec) > 1;
+          const wrapChanged = eventTitleScrollWrap !== wantWrap;
+          const sizeOrTextChanged = eventTitleScrollLayoutKey !== layoutKey;
 
-          if (justEnabled || durationChanged) {
-            eventTitleBanner.style.setProperty('--event-scroll-duration', duration.toFixed(2) + 's');
+          let scrollOpts;
+          if ((dirChanged || wrapChanged) && !justEnabled) {
+            // Snap position sliders to where the text is now, then continue
+            // from the anchor in the new direction / wrap mode.
+            const captured = captureScrollTextPosPercent();
+            if (captured) setEventNamePosPercent(captured.x, captured.y);
+            scrollOpts = { progress: 0 };
           }
 
-          if (justEnabled) {
-            track.style.animation = 'none';
-            track.style.animationDelay = '';
-            void track.offsetWidth;
-            track.style.animation = '';
-          } else if (durationChanged) {
-            // Keep the text where it is: resume at the same cycle progress
-            let progress = 0;
-            const anim = track.getAnimations()[0];
-            if (anim && anim.effect) {
-              const d = anim.effect.getComputedTiming().duration;
-              if (typeof d === 'number' && d > 0) {
-                progress = ((anim.currentTime || 0) % d) / d;
-              }
-            }
-            track.style.animation = 'none';
-            void track.offsetWidth;
-            track.style.animation = '';
-            track.style.animationDelay = '-' + (progress * duration).toFixed(3) + 's';
+          if (justEnabled || dirChanged || speedChanged || wrapChanged || sizeOrTextChanged) {
+            syncEventTitleScroll(track, scrollDx, scrollDy, pxPerSec, scrollDirDeg, wantWrap, scrollOpts);
+            eventTitleScrollLayoutKey = layoutKey;
           }
-
-          eventTitleScrollActive = true;
-          eventTitleScrollDurationSec = duration;
         } else {
-          eventTitleBanner.style.removeProperty('--event-scroll-duration');
-          track.style.animation = '';
-          track.style.animationDelay = '';
-          eventTitleScrollActive = false;
-          eventTitleScrollDurationSec = null;
+          stopEventTitleScroll(track);
         }
       }
 
@@ -3975,7 +4981,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         eventTitleBanner.hidden = true;
         eventTitleBanner.setAttribute('aria-hidden', 'true');
       }
+      syncDemoContrastWatch();
       updateSettingsPickerSummary();
+      updateTextPickerSummary();
     }
 
     function updateQrPickerSummary() {
@@ -3991,6 +4999,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       displayTimeVal.textContent = displayTimeInput.value + 's';
       transitionSpeedVal.textContent = Number(transitionSpeedInput.value).toFixed(1) + 's';
       updateSettingsPickerSummary();
+      updateTextPickerSummary();
       updateQrPickerSummary();
     }
 
@@ -4696,19 +5705,64 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         applySettings();
       });
     });
-    showEventName.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    showEventName.addEventListener('change', () => {
+      if (isDemoEvent()) showEventName.checked = true;
+      scheduleMenuHide();
+      updateEventTitleBanner();
+    });
+    eventNameText.addEventListener('input', () => {
+      if (isDemoEvent()) {
+        eventNameText.value = getEventDefaultName() || 'demo';
+        return;
+      }
+      scheduleMenuHide();
+      updateEventTitleBanner();
+    });
     eventNameFontBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       scheduleMenuHide();
       setEventNameFontMenuOpen(eventNameFontMenu.hidden);
     });
     eventNameFontMenu.addEventListener('click', (e) => { e.stopPropagation(); });
-    eventNameSize.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameSize.addEventListener('input', () => {
+      const minVh = getEventNameSizeMinVh();
+      if (Number(eventNameSize.value) < minVh) eventNameSize.value = String(minVh);
+      scheduleMenuHide();
+      updateEventTitleBanner();
+    });
+    eventNamePosX.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNamePosY.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameColor.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameOutline.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameOutlineColor.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameOutlineSize.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameShadow.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameShadowDist.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameShadowBlur.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    wireDirDial(
+      eventNameShadowDirDial,
+      eventNameShadowDirWrap,
+      { get on() { return shadowDirDragging; }, set on(v) { shadowDirDragging = v; } },
+      getShadowDirDegrees,
+      (deg) => setShadowDirDegrees(deg),
+    );
+    wireDirDial(
+      eventNameScrollDirDial,
+      eventNameScrollDirWrap,
+      { get on() { return scrollDirDragging; }, set on(v) { scrollDirDragging = v; } },
+      getScrollDirDegrees,
+      (deg) => setScrollDirDegrees(deg),
+    );
+    eventNameScrollDirPresets.addEventListener('click', (e) => {
+      const btn = e.target.closest('.dir-dial-preset');
+      if (!btn || eventNameScrollDirWrap.classList.contains('disabled')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setScrollDirDegrees(Number(btn.dataset.deg));
+      scheduleMenuHide();
+    });
     eventNameScroll.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    eventNameWrap.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameScrollSpeed.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     copyShareUrlBtn.addEventListener('click', () => { void copyShareUrl(); });
     menuCloseBtn.addEventListener('click', (e) => {
@@ -4716,6 +5770,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       closeMenu();
     });
     wireSubpanel(settingsOverlay, settingsPickerBtn, settingsCloseBtn, setSettingsPanelOpen);
+    wireSubpanel(textSettingsOverlay, textPickerBtn, textCloseBtn, setTextPanelOpen);
     wireSubpanel(qrSettingsOverlay, qrPickerBtn, qrCloseBtn, setQrPanelOpen);
     wireSubpanel(transitionOverlay, transitionPickerBtn, transitionCloseBtn, setTransitionPanelOpen);
     document.addEventListener('click', (e) => {
@@ -4727,6 +5782,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     qrSize.addEventListener('change', () => { scheduleMenuHide(); updateQrPickerSummary(); void updateQrOverlay(); });
     window.addEventListener('resize', onQrViewportChange);
     window.addEventListener('orientationchange', onQrViewportChange);
+    window.addEventListener('resize', () => { updateEventTitleBanner(); });
+    window.addEventListener('orientationchange', () => { updateEventTitleBanner(); });
     qrBrandImage.addEventListener('change', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrand.addEventListener('input', () => { scheduleMenuHide(); void updateQrOverlay(); });
     qrBrandFile.addEventListener('change', () => {

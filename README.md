@@ -106,14 +106,23 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `qrSize` | — | `smallest`, `small`, `medium`, `large` | `smallest` (adapts to screen; minimum reliably scannable size) |
 | `qrBrandImage` | — | `none`, `fotoblast`, `custom` | `fotoblast` |
 | `qrBrand` | `qrLabel` | Text, max 48 chars | `FotoBlast` |
-| `showEventName` | `eventName` | `1`/`0`, `true`/`false` | `false` (shows `EVENT_NAME` at top when enabled) |
+| `showEventName` | `eventName` | `1`/`0`, `true`/`false` | `false` (shows banner text when enabled) |
+| `eventNameText` | `bannerText` | Banner text string (max 120 chars) | `EVENT_NAME` display name |
 | `eventNameFont` | `bannerFont` | See font list below | `system` |
 | `eventNameSize` | `bannerSize` | `2`–`100` (% of screen height); also accepts legacy `small`/`medium`/`large`/`xlarge` | `6` |
+| `eventNamePosX` | `bannerPosX` | `0`–`100` (% from left; text centered on point) | `50` |
+| `eventNamePosY` | `bannerPosY` | `0`–`100` (% from top; `0` top, `100` bottom) | `5` |
 | `eventNameColor` | `bannerColor` | `#RRGGBB` | `#f8fafc` |
+| `eventNameOutline` | `bannerOutline` | `1`/`0`, `true`/`false` | `false` |
+| `eventNameOutlineColor` | `bannerOutlineColor` | `#RRGGBB` | `#000000` |
+| `eventNameOutlineSize` | `bannerOutlineSize` | `1`–`16` (relative; scales with text size) | `2` |
 | `eventNameShadow` | `bannerShadow` | `1`/`0`, `true`/`false` | `true` |
 | `eventNameShadowDist` | `bannerShadowDist` | `0`–`24` (relative; scales with text size) | `4` |
 | `eventNameShadowBlur` | `bannerShadowBlur` | `0`–`24` (relative; scales with text size) | `2` |
+| `eventNameShadowDir` | `bannerShadowDir` | `0`–`359` (degrees; `0` right, `90` down) | `90` |
 | `eventNameScroll` | `bannerScroll` | `1`/`0`, `true`/`false` | `false` |
+| `eventNameWrap` | `bannerWrap` | `1`/`0`, `true`/`false` (viewport edge wrap while scrolling) | `true` |
+| `eventNameScrollDir` | `bannerScrollDir` | `0`–`359` (degrees; travel direction; `180` left) | `180` |
 | `eventNameScrollSpeed` | `bannerScrollSpeed` | `1`–`10` (10 is very fast) | `5` |
 | `fullscreen` | — | `1`/`0`, `true`/`false` | `false` (if blocked, a hint appears after 5s or on click) |
 
