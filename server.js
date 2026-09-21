@@ -2080,6 +2080,72 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       to { transform: translateX(-100%); }
     }
     .event-name-options.disabled { opacity: 0.45; pointer-events: none; }
+    .ken-burns-options.disabled { opacity: 0.45; pointer-events: none; }
+    .ken-burns-options {
+      margin: 0.35rem 0 0.55rem;
+      padding: 0.35rem 0 0.15rem;
+    }
+    .ken-burns-dirs-label {
+      display: block;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      margin-bottom: 0.4rem;
+    }
+    .ken-burns-pad {
+      display: grid;
+      grid-template-columns: repeat(3, 2.4rem);
+      grid-template-rows: repeat(3, 2.4rem);
+      gap: 0.3rem;
+      justify-content: center;
+      margin: 0 auto;
+    }
+    .ken-burns-pad label {
+      position: relative;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #e2e8f0;
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ken-burns-pad label:hover { background: #243247; }
+    .ken-burns-pad input {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ken-burns-pad label:has(input:checked) {
+      background: #4f46e5;
+      border-color: #6366f1;
+      color: #fff;
+    }
+    .ken-burns-pad label.kb-zoom-cell {
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 0.15rem;
+      line-height: 1.1;
+    }
+    .ken-burns-pad label.kb-zoom-cell:has(input:checked) {
+      background: #059669;
+      border-color: #10b981;
+    }
+    .ken-burns-hint {
+      margin: 0.55rem 0 0;
+      font-size: 0.72rem;
+      line-height: 1.4;
+      color: #94a3b8;
+      text-align: center;
+    }
     .event-name-options label {
       display: block;
       font-size: 0.8rem;
@@ -2164,14 +2230,28 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     .layer {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+      overflow: hidden;
       transform-origin: center center;
       transition-duration: 0s;
       transition-property: opacity, transform, filter, clip-path;
       transition-timing-function: ease-in-out;
       z-index: 1;
+    }
+    .layer-media {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transform-origin: center center;
+      display: block;
+    }
+    .layer-media.kb-fit {
+      object-fit: cover;
+    }
+    /* Constant scale for dual-axis pan room; not a progressive zoom. */
+    .layer-media.kb-pan {
+      scale: 1.5;
     }
     .layer.off {
       visibility: hidden;
@@ -2622,8 +2702,12 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 <body>
   ${EVENT_NAME_HTML}
   <div id="stage">
-    <img id="layerA" class="layer" alt="" decoding="async">
-    <img id="layerB" class="layer off" alt="" decoding="async">
+    <div id="wrapA" class="layer">
+      <img id="layerA" class="layer-media" alt="" decoding="async">
+    </div>
+    <div id="wrapB" class="layer off">
+      <img id="layerB" class="layer-media" alt="" decoding="async">
+    </div>
     <div id="staticOverlay" aria-hidden="true"></div>
   </div>
   <p id="empty">No photos uploaded yet.</p>
@@ -2696,6 +2780,25 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           <div class="field">
             <label for="transitionSpeed">Transition speed <span id="transitionSpeedVal">0.8s</span></label>
             <input type="range" id="transitionSpeed" min="0.1" max="10" step="0.1" value="0.8">
+          </div>
+          <label class="check-row" for="kenBurns">
+            <input type="checkbox" id="kenBurns">
+            Ken Burns motion
+          </label>
+          <div class="ken-burns-options disabled" id="kenBurnsOptions">
+            <span class="ken-burns-dirs-label">Path (edges) · Zoom (center)</span>
+            <div class="ken-burns-pad" id="kenBurnsPad" role="group" aria-label="Ken Burns path and zoom">
+              <label for="kbDirUpLeft" title="Up left"><input type="checkbox" id="kbDirUpLeft" value="up-left"><span aria-hidden="true">↖</span></label>
+              <label for="kbDirUp" title="Up"><input type="checkbox" id="kbDirUp" value="up"><span aria-hidden="true">↑</span></label>
+              <label for="kbDirUpRight" title="Up right"><input type="checkbox" id="kbDirUpRight" value="up-right"><span aria-hidden="true">↗</span></label>
+              <label for="kbDirLeft" title="Left"><input type="checkbox" id="kbDirLeft" value="left"><span aria-hidden="true">←</span></label>
+              <label class="kb-zoom-cell" for="kenBurnsZoom" title="Zoom in during motion"><input type="checkbox" id="kenBurnsZoom"><span>Zoom</span></label>
+              <label for="kbDirRight" title="Right"><input type="checkbox" id="kbDirRight" value="right"><span aria-hidden="true">→</span></label>
+              <label for="kbDirDownLeft" title="Down left"><input type="checkbox" id="kbDirDownLeft" value="down-left"><span aria-hidden="true">↙</span></label>
+              <label for="kbDirDown" title="Down"><input type="checkbox" id="kbDirDown" value="down"><span aria-hidden="true">↓</span></label>
+              <label for="kbDirDownRight" title="Down right"><input type="checkbox" id="kbDirDownRight" value="down-right"><span aria-hidden="true">↘</span></label>
+            </div>
+            <p class="ken-burns-hint">Leave directions unchecked to auto-pick a path from each photo’s aspect ratio. Center toggles progressive zoom-in. Path spans transition in + display + transition out.</p>
           </div>
           <label class="check-row" for="showEventName">
             <input type="checkbox" id="showEventName">
@@ -2817,6 +2920,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     const layerA = document.getElementById('layerA');
     const layerB = document.getElementById('layerB');
+    const wrapA = document.getElementById('wrapA');
+    const wrapB = document.getElementById('wrapB');
     const stage = document.getElementById('stage');
     const emptyEl = document.getElementById('empty');
     const menu = document.getElementById('menu');
@@ -2826,6 +2931,19 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const menuCloseBtn = document.getElementById('menuCloseBtn');
     const displayTimeInput = document.getElementById('displayTime');
     const transitionSpeedInput = document.getElementById('transitionSpeed');
+    const kenBurns = document.getElementById('kenBurns');
+    const kenBurnsOptions = document.getElementById('kenBurnsOptions');
+    const kenBurnsZoom = document.getElementById('kenBurnsZoom');
+    const kbDirInputs = {
+      'up-left': document.getElementById('kbDirUpLeft'),
+      up: document.getElementById('kbDirUp'),
+      'up-right': document.getElementById('kbDirUpRight'),
+      left: document.getElementById('kbDirLeft'),
+      right: document.getElementById('kbDirRight'),
+      'down-left': document.getElementById('kbDirDownLeft'),
+      down: document.getElementById('kbDirDown'),
+      'down-right': document.getElementById('kbDirDownRight'),
+    };
     const showEventName = document.getElementById('showEventName');
     const eventNameOptions = document.getElementById('eventNameOptions');
     const eventNameFont = document.getElementById('eventNameFont');
@@ -2912,6 +3030,140 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function getTransitionMs() {
       return Math.round(Number(transitionSpeedInput.value) * 1000);
+    }
+
+    const KB_DIRS = [
+      'up-left', 'up', 'up-right',
+      'left', 'right',
+      'down-left', 'down', 'down-right',
+    ];
+    // Zoom off: constant scale 1.5 + translate (pan only; dual-axis path room).
+    // Zoom on: scale animates 1.5 → 2.0 while translating (progressive zoom-in).
+    const KB_SCALE = 1.5;
+    const KB_SCALE_ZOOM_END = 2;
+    const KB_PAN_PCT = ((1 - 1 / KB_SCALE) / 2) * 100;
+
+    function getKenBurnsDurationMs() {
+      const t = getSelectedTransitions().length ? getTransitionMs() : 0;
+      return getDisplayMs() + 2 * t;
+    }
+
+    function getSelectedKenBurnsDirs() {
+      return KB_DIRS.filter((d) => kbDirInputs[d] && kbDirInputs[d].checked);
+    }
+
+    function kenBurnsAutoDirsForImage(img) {
+      const nw = img && img.naturalWidth;
+      const nh = img && img.naturalHeight;
+      const wrap = img ? layerWrap(img) : null;
+      const vw = Math.max(1, (wrap && wrap.clientWidth) || window.innerWidth);
+      const vh = Math.max(1, (wrap && wrap.clientHeight) || window.innerHeight);
+      if (!nw || !nh) {
+        return ['left', 'right', 'up', 'down'];
+      }
+      const imageAspect = nw / nh;
+      const viewAspect = vw / vh;
+      const ratio = imageAspect / viewAspect;
+      // Under cover: ratio > 1 → horizontal overflow (prefer left/right paths)
+      // ratio < 1 → vertical overflow (prefer up/down paths)
+      if (ratio > 1.06) {
+        return ['left', 'right', 'up-left', 'up-right', 'down-left', 'down-right'];
+      }
+      if (ratio < 1 / 1.06) {
+        return ['up', 'down', 'up-left', 'up-right', 'down-left', 'down-right'];
+      }
+      return KB_DIRS.slice();
+    }
+
+    function pickKenBurnsDir(img) {
+      const selected = getSelectedKenBurnsDirs();
+      const pool = selected.length ? selected : kenBurnsAutoDirsForImage(img);
+      return pool[Math.floor(Math.random() * pool.length)] || 'right';
+    }
+
+    function kenBurnsAxisDelta(dir) {
+      const map = {
+        up: { dx: 0, dy: -1 },
+        down: { dx: 0, dy: 1 },
+        left: { dx: -1, dy: 0 },
+        right: { dx: 1, dy: 0 },
+        'up-left': { dx: -1, dy: -1 },
+        'up-right': { dx: 1, dy: -1 },
+        'down-left': { dx: -1, dy: 1 },
+        'down-right': { dx: 1, dy: 1 },
+      };
+      return map[dir] || map.right;
+    }
+
+    function layerWrap(img) {
+      return img === layerA ? wrapA : img === layerB ? wrapB : img.parentElement;
+    }
+
+    function kenBurnsKeyframes(dir, zoom) {
+      const { dx, dy } = kenBurnsAxisDelta(dir);
+      const p = KB_PAN_PCT;
+      const x0 = (-dx * p) + '%';
+      const y0 = (-dy * p) + '%';
+      const x1 = (dx * p) + '%';
+      const y1 = (dy * p) + '%';
+      // Photo travels in the named direction via translate (works on both axes).
+      if (zoom) {
+        return [
+          { scale: String(KB_SCALE), translate: x0 + ' ' + y0 },
+          { scale: String(KB_SCALE_ZOOM_END), translate: x1 + ' ' + y1 },
+        ];
+      }
+      // Pan-only: scale held by .kb-pan; animate translate only.
+      return [
+        { translate: x0 + ' ' + y0 },
+        { translate: x1 + ' ' + y1 },
+      ];
+    }
+
+    function stopKenBurns(img) {
+      if (!img) return;
+      if (img._kbAnim) {
+        try { img._kbAnim.cancel(); } catch (_) {}
+        img._kbAnim = null;
+      }
+      img._kbOn = false;
+      img._kbZoom = false;
+      img.classList.remove('kb-fit', 'kb-pan');
+      img.style.scale = '';
+      img.style.translate = '';
+      img.style.objectPosition = '';
+    }
+
+    function startKenBurns(img, dir) {
+      stopKenBurns(img);
+      if (!img || !kenBurns.checked) return;
+      const direction = dir || pickKenBurnsDir(img);
+      const duration = Math.max(200, getKenBurnsDurationMs());
+      const zoom = !!kenBurnsZoom.checked;
+      img._kbOn = true;
+      img._kbZoom = zoom;
+      img._kbDir = direction;
+      img.classList.add('kb-fit');
+      if (zoom) img.classList.remove('kb-pan');
+      else img.classList.add('kb-pan');
+      try {
+        img._kbAnim = img.animate(kenBurnsKeyframes(direction, zoom), {
+          duration,
+          easing: 'linear',
+          fill: 'forwards',
+        });
+      } catch (_) {
+        stopKenBurns(img);
+      }
+    }
+
+    function setLayerClass(img, base) {
+      // Transitions live on the wrapper; Ken Burns classes stay on the image.
+      layerWrap(img).className = base;
+    }
+
+    function syncKenBurnsOptions() {
+      kenBurnsOptions.classList.toggle('disabled', !kenBurns.checked);
     }
 
     const transitionSelectAll = document.createElement('input');
@@ -3133,6 +3385,39 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         );
       }
 
+      const kbRaw = params.get('kenBurns') ?? params.get('kb');
+      if (kbRaw !== null) {
+        kenBurns.checked = parseQueryBool(kbRaw, kenBurns.checked);
+        shouldApplySettings = true;
+      }
+
+      const kbDirRaw = params.get('kenBurnsDir') ?? params.get('kbDir');
+      if (kbDirRaw !== null) {
+        const normalized = kbDirRaw.trim().toLowerCase();
+        let selected;
+        if (!normalized || normalized === 'none' || normalized === 'auto') {
+          selected = new Set();
+        } else if (normalized === 'all') {
+          selected = new Set(KB_DIRS);
+        } else {
+          selected = new Set(
+            normalized.split(',').map((s) => s.trim()).filter((s) => KB_DIRS.includes(s)),
+          );
+        }
+        KB_DIRS.forEach((d) => {
+          if (kbDirInputs[d]) kbDirInputs[d].checked = selected.has(d);
+        });
+        shouldApplySettings = true;
+      }
+
+      const kbZoomRaw = params.get('kenBurnsZoom') ?? params.get('kbZoom');
+      if (kbZoomRaw !== null) {
+        kenBurnsZoom.checked = parseQueryBool(kbZoomRaw, kenBurnsZoom.checked);
+        shouldApplySettings = true;
+      }
+
+      syncKenBurnsOptions();
+
       return {
         shouldApplySettings,
         enterFullscreen: parseQueryBool(params.get('fullscreen'), false),
@@ -3167,6 +3452,18 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       params.set('eventNameShadowBlur', eventNameShadowBlur.value);
       params.set('eventNameScroll', eventNameScroll.checked ? '1' : '0');
       params.set('eventNameScrollSpeed', eventNameScrollSpeed.value);
+      params.set('kenBurns', kenBurns.checked ? '1' : '0');
+      params.set('kenBurnsZoom', kenBurnsZoom.checked ? '1' : '0');
+      {
+        const dirs = getSelectedKenBurnsDirs();
+        if (!dirs.length) {
+          params.set('kenBurnsDir', 'auto');
+        } else if (dirs.length === KB_DIRS.length) {
+          params.set('kenBurnsDir', 'all');
+        } else {
+          params.set('kenBurnsDir', dirs.join(','));
+        }
+      }
       if (isFullscreen()) params.set('fullscreen', '1');
 
       return location.origin + location.pathname + '?' + params.toString();
@@ -3298,17 +3595,19 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     function applyTransitionTiming(out, inn, type, duration) {
       clearLayerTransition(out);
       clearLayerTransition(inn);
+      const outW = layerWrap(out);
+      const innW = layerWrap(inn);
       if (type !== 'blur' && type !== 'scan') {
         const ms = duration + 'ms';
-        out.style.transitionDuration = ms;
-        inn.style.transitionDuration = ms;
-        out.style.transitionTimingFunction = '';
-        inn.style.transitionTimingFunction = '';
+        outW.style.transitionDuration = ms;
+        innW.style.transitionDuration = ms;
+        outW.style.transitionTimingFunction = '';
+        innW.style.transitionTimingFunction = '';
       }
       if (type === 'bounce') {
-        inn.style.transitionTimingFunction = 'cubic-bezier(0.34, 1.45, 0.64, 1)';
+        innW.style.transitionTimingFunction = 'cubic-bezier(0.34, 1.45, 0.64, 1)';
       } else if (type === 'smash') {
-        inn.style.transitionTimingFunction = 'cubic-bezier(0.2, 0.9, 0.2, 1)';
+        innW.style.transitionTimingFunction = 'cubic-bezier(0.2, 0.9, 0.2, 1)';
       }
     }
 
@@ -3372,6 +3671,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         active.src = photos[index].url;
         active.alt = photos[index].filename;
         resetLayer(active, false);
+        startKenBurns(active);
         resetLayer(idle, true);
         idle.removeAttribute('src');
       }
@@ -3407,6 +3707,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
         inn.src = next.url;
         inn.alt = next.filename;
+        startKenBurns(inn);
 
         if (type === 'none') {
           finishSwap(out, inn, nextIndex);
@@ -3431,27 +3732,26 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
         if (type === 'blur' || type === 'scan') {
           const effectDur = duration + 'ms';
-          out.className = 'layer from ' + type;
-          inn.className = 'layer to ' + type;
-          out.style.setProperty('--effect-duration', effectDur);
-          inn.style.setProperty('--effect-duration', effectDur);
+          setLayerClass(out, 'layer from ' + type);
+          setLayerClass(inn, 'layer to ' + type);
+          layerWrap(out).style.setProperty('--effect-duration', effectDur);
+          layerWrap(inn).style.setProperty('--effect-duration', effectDur);
           await waitForLayerPaint(inn);
           commitTransitionFrame(out, inn);
-          out.classList.add('run');
-          inn.classList.add('run');
+          layerWrap(out).classList.add('run');
+          layerWrap(inn).classList.add('run');
           await waitMs(duration);
           finishSwap(out, inn, nextIndex);
           return;
         }
 
-        out.className = 'layer from ' + type;
-        inn.className = 'layer to ' + type;
+        setLayerClass(out, 'layer from ' + type);
+        setLayerClass(inn, 'layer to ' + type);
         applyTransitionTiming(out, inn, type, duration);
 
-        void out.offsetWidth;
-        void inn.offsetWidth;
-        out.classList.add('animate');
-        inn.classList.add('animate');
+        commitTransitionFrame(out, inn);
+        layerWrap(out).classList.add('animate');
+        layerWrap(inn).classList.add('animate');
 
         await waitMs(duration);
         finishSwap(out, inn, nextIndex);
@@ -3475,8 +3775,34 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function finishSwap(out, inn, nextIndex) {
-      resetLayer(out, true);
-      resetLayer(inn, false);
+      stopKenBurns(out);
+      setLayerClass(out, 'layer off');
+      clearLayerVisual(out);
+      out.className = 'layer-media';
+
+      // Keep the Ken Burns animation that began at transition-in.
+      const kbAnim = inn._kbAnim;
+      const kbDir = inn._kbDir;
+      const kbZoom = !!inn._kbZoom;
+      const kbOn = !!inn._kbOn;
+      clearLayerVisual(inn);
+      inn._kbAnim = kbAnim || null;
+      inn._kbDir = kbDir;
+      inn._kbZoom = kbZoom;
+      inn._kbOn = kbOn;
+      inn.className = 'layer-media';
+      if (inn._kbAnim) {
+        inn.classList.add('kb-fit');
+        if (inn._kbZoom) inn.classList.remove('kb-pan');
+        else inn.classList.add('kb-pan');
+        setLayerClass(inn, 'layer');
+      } else if (kenBurns.checked) {
+        setLayerClass(inn, 'layer');
+        startKenBurns(inn, kbDir);
+      } else {
+        setLayerClass(inn, 'layer');
+      }
+
       active = inn;
       idle = out;
       index = nextIndex;
@@ -3487,6 +3813,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     function updateSettingsPickerSummary() {
       let text =
         displayTimeInput.value + 's each · ' + Number(transitionSpeedInput.value).toFixed(1) + 's transition';
+      if (kenBurns.checked) {
+        const dirs = getSelectedKenBurnsDirs();
+        let kb = ' · Ken Burns';
+        if (kenBurnsZoom.checked) kb += ' zoom';
+        if (!dirs.length) kb += ' (auto path)';
+        else if (dirs.length < KB_DIRS.length) kb += ' (' + dirs.join(', ') + ')';
+        text += kb;
+      }
       if (showEventName.checked && !showEventName.disabled) text += ' · event name';
       settingsPickerSummary.textContent = text;
     }
@@ -3668,23 +4002,26 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       transitionTimer = null;
     }
 
-    function clearLayerTransition(el) {
+    function clearLayerTransition(img) {
+      const el = layerWrap(img);
       el.style.transitionProperty = '';
       el.style.transitionDuration = '';
       el.style.transitionDelay = '';
       el.style.transitionTimingFunction = '';
     }
 
-    function clearEffectRun(el) {
+    function clearEffectRun(img) {
+      const el = layerWrap(img);
       el.classList.remove('run');
       el.style.removeProperty('--effect-duration');
       el.style.animation = '';
       el.style.transform = '';
     }
 
-    function clearLayerVisual(el) {
-      clearLayerTransition(el);
-      clearEffectRun(el);
+    function clearLayerVisual(img) {
+      clearLayerTransition(img);
+      clearEffectRun(img);
+      const el = layerWrap(img);
       el.style.filter = '';
       el.style.opacity = '';
       el.style.clipPath = '';
@@ -3699,19 +4036,21 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       }
     }
 
-    function clearTvTunerGlitch(el) {
-      if (!el) return;
+    function clearTvTunerGlitch(img) {
+      if (!img) return;
+      const el = layerWrap(img);
       el.style.transform = '';
       el.style.filter = '';
       el.style.opacity = '';
       el.style.clipPath = '';
     }
 
-    function applyTvTunerGlitch(el, intensity, tick, phaseSeed) {
+    function applyTvTunerGlitch(img, intensity, tick, phaseSeed) {
       if (intensity <= 0.001) {
-        clearTvTunerGlitch(el);
+        clearTvTunerGlitch(img);
         return;
       }
+      const el = layerWrap(img);
       const freq = 4 + intensity * 32;
       const phase = phaseSeed * 0.0012 * freq + tick * 0.22;
       const flicker = Math.sin(phase) * intensity;
@@ -3752,8 +4091,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       const t3 = duration * 0.55;
       const t4 = duration * 0.95;
 
-      out.className = 'layer from tuner-glitch';
-      inn.className = 'layer to tuner-glitch off';
+      setLayerClass(out, 'layer from tuner-glitch');
+      setLayerClass(inn, 'layer to tuner-glitch off');
       clearTvTunerGlitch(out);
       clearTvTunerGlitch(inn);
       stage.classList.remove('static-on');
@@ -3838,9 +4177,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       });
     }
 
-    function resetLayer(el, off) {
-      el.className = off ? 'layer off' : 'layer';
-      clearLayerVisual(el);
+    function resetLayer(img, off) {
+      stopKenBurns(img);
+      setLayerClass(img, off ? 'layer off' : 'layer');
+      clearLayerVisual(img);
+      img.className = 'layer-media';
     }
 
     function waitForLayerPaint(el) {
@@ -3859,8 +4200,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     }
 
     function commitTransitionFrame(out, inn) {
-      void out.offsetWidth;
-      void inn.offsetWidth;
+      void layerWrap(out).offsetWidth;
+      void layerWrap(inn).offsetWidth;
     }
 
     function waitMs(ms) {
@@ -4268,6 +4609,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         active.alt = photos[index].filename;
         markPhotoShown(photos[index].filename);
         resetLayer(active, false);
+        startKenBurns(active);
         resetLayer(idle, true);
       }
       if (photos.length >= 2) scheduleHold();
@@ -4295,6 +4637,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     function applySettings() {
       updateLabels();
+      syncKenBurnsOptions();
       if (!photos.length) return;
       transitioning = false;
       clearTimers();
@@ -4304,6 +4647,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       active.src = photos[index].url;
       active.alt = photos[index].filename;
       resetLayer(active, false);
+      startKenBurns(active);
       resetLayer(idle, true);
       idle.removeAttribute('src');
       stage.classList.remove('static-on');
@@ -4335,6 +4679,23 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
 
     displayTimeInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
     transitionSpeedInput.addEventListener('input', () => { scheduleMenuHide(); updateLabels(); applySettings(); });
+    kenBurns.addEventListener('change', () => {
+      scheduleMenuHide();
+      syncKenBurnsOptions();
+      applySettings();
+    });
+    kenBurnsZoom.addEventListener('change', () => {
+      scheduleMenuHide();
+      updateSettingsPickerSummary();
+      applySettings();
+    });
+    KB_DIRS.forEach((d) => {
+      kbDirInputs[d].addEventListener('change', () => {
+        scheduleMenuHide();
+        updateSettingsPickerSummary();
+        applySettings();
+      });
+    });
     showEventName.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameFontBtn.addEventListener('click', (e) => {
       e.stopPropagation();

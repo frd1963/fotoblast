@@ -98,6 +98,9 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `display` | `displayTime` | `1`–`30` (seconds per photo) | `5` |
 | `transitionSpeed` | `speed` | `0.1`–`10` (seconds) | `0.8` |
 | `transitions` | — | Comma-separated transition ids, `all`, or `none` | none selected (instant cut) |
+| `kenBurns` | `kb` | `1`/`0`, `true`/`false` | `false` |
+| `kenBurnsZoom` | `kbZoom` | `1`/`0`, `true`/`false` | `false` (zoom in during motion) |
+| `kenBurnsDir` | `kbDir` | `up`, `down`, `left`, `right`, `up-left`, `up-right`, `down-left`, `down-right` (comma-separated), `all`, `auto`, or `none` | `auto` (path chosen from each photo’s aspect ratio) |
 | `qr` | `qrShow` | `1`/`0`, `true`/`false`, `on`/`off` | `true` |
 | `qrCorner` | — | `tl`, `tr`, `bl`, `br` | `bl` |
 | `qrSize` | — | `smallest`, `small`, `medium`, `large` | `smallest` (adapts to screen; minimum reliably scannable size) |
@@ -125,7 +128,7 @@ Transition ids include: `fade`, `slide-left`, `slide-right`, `slide-up`, `slide-
 Example:
 
 ```text
-/slideshow?display=8&speed=1.2&transitions=fade,blur,tuner&qr=1&qrCorner=br&qrSize=large&qrBrand=Scan%20to%20share
+/slideshow?display=8&speed=1.2&transitions=fade,blur,tuner&kenBurns=1&kenBurnsZoom=1&kenBurnsDir=left,right,up-left&qr=1&qrCorner=br&qrSize=large&qrBrand=Scan%20to%20share
 ```
 
 ## Sync behavior
