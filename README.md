@@ -107,6 +107,7 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `qrBrandImage` | — | `none`, `fotoblast`, `custom` | `fotoblast` |
 | `qrBrand` | `qrLabel` | Text, max 48 chars | `FotoBlast` |
 | `showEventName` | `eventName` | `1`/`0`, `true`/`false` | `false` (shows banner text when enabled) |
+| `disableDemoLocks` | `demoLocksOff` | `1`/`0`, `true`/`false` (demo events only; unlocks forced text / contrast / min size) | `false` |
 | `eventNameText` | `bannerText` | Banner text string (max 120 chars) | `EVENT_NAME` display name |
 | `eventNameFont` | `bannerFont` | See font list below | `system` |
 | `eventNameSize` | `bannerSize` | `2`–`100` (% of screen height); also accepts legacy `small`/`medium`/`large`/`xlarge` | `6` |
@@ -120,6 +121,7 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `eventNameShadowDist` | `bannerShadowDist` | `0`–`24` (relative; scales with text size) | `4` |
 | `eventNameShadowBlur` | `bannerShadowBlur` | `0`–`24` (relative; scales with text size) | `2` |
 | `eventNameShadowDir` | `bannerShadowDir` | `0`–`359` (degrees; `0` right, `90` down) | `90` |
+| `eventNameShadow3d` | `bannerShadow3d` | `1`/`0`, `true`/`false` (per-letter shadow from a virtual light on the ellipse that touches all four viewport edges; dial sets angle on that ellipse, distance scales shadow length only) | `false` |
 | `eventNameScroll` | `bannerScroll` | `1`/`0`, `true`/`false` | `false` |
 | `eventNameWrap` | `bannerWrap` | `1`/`0`, `true`/`false` (viewport edge wrap while scrolling) | `true` |
 | `eventNameScrollDir` | `bannerScrollDir` | `0`–`359` (degrees; travel direction; `180` left) | `180` |

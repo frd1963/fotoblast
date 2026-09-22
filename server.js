@@ -2048,7 +2048,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       position: relative;
       z-index: 1;
     }
-    #eventTitleBanner.shadow .event-title-text {
+    #eventTitleBanner.shadow:not(.shadow-3d) .event-title-text {
       /* drop-shadow paints behind the full glyph (fill + outline stroke) */
       filter: drop-shadow(
         var(--event-shadow-x, 0px)
@@ -2057,7 +2057,19 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         rgba(0, 0, 0, 0.8)
       );
     }
-    #eventTitleBanner.outline .event-title-text {
+    #eventTitleBanner.shadow.shadow-3d .event-title-text {
+      filter: none;
+    }
+    #eventTitleBanner.shadow-3d .event-title-letter {
+      position: relative;
+      display: inline-block;
+      white-space: pre;
+    }
+    #eventTitleBanner.outline:not(.shadow-3d) .event-title-text {
+      -webkit-text-stroke: var(--event-outline-width, 1px) var(--event-outline-color, #000000);
+      paint-order: stroke fill;
+    }
+    #eventTitleBanner.outline.shadow-3d .event-title-letter {
       -webkit-text-stroke: var(--event-outline-width, 1px) var(--event-outline-color, #000000);
       paint-order: stroke fill;
     }
@@ -2116,6 +2128,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     .event-name-options .check-row-pair .check-row.disabled {
       opacity: 0.4;
       pointer-events: none;
+    }
+    #disableDemoLocksRow {
+      margin: 0 0 0.65rem;
     }
     .event-name-options.disabled { opacity: 0.45; pointer-events: none; }
     .ken-burns-options.disabled { opacity: 0.45; pointer-events: none; }
@@ -2318,6 +2333,42 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       transform: rotate(var(--dir-deg, 90deg));
       transform-origin: left center;
       pointer-events: none;
+      transition: opacity 0.15s ease;
+    }
+    .shadow-dir-3d-btn {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 3;
+      width: 1.9rem;
+      height: 1.9rem;
+      margin: 0;
+      padding: 0;
+      border-radius: 50%;
+      border: 1px solid #64748b;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 0.58rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      line-height: 1;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.8);
+    }
+    .shadow-dir-3d-btn:hover {
+      border-color: #94a3b8;
+      color: #f8fafc;
+    }
+    .shadow-dir-3d-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .shadow-dir-dial.shadow-3d-active .shadow-dir-3d-btn {
+      background: #4f46e5;
+      border-color: #a5b4fc;
+      color: #fff;
+      box-shadow: 0 0 0 1px #312e81;
     }
     .event-name-dials {
       display: flex;
@@ -3047,6 +3098,10 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           <button type="button" id="textCloseBtn" class="transition-close-btn" aria-label="Close">×</button>
         </div>
         <div class="transition-sheet-body">
+          <label class="check-row" for="disableDemoLocks" id="disableDemoLocksRow" hidden>
+            <input type="checkbox" id="disableDemoLocks">
+            Disable demo settings
+          </label>
           <div class="event-name-options disabled" id="eventNameOptions">
             <div class="field">
               <label for="eventNameText">Text</label>
@@ -3120,10 +3175,18 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
                   aria-labelledby="eventNameShadowDirLabel"
                 >
                   <input type="hidden" id="eventNameShadowDir" value="90">
+                  <input type="hidden" id="eventNameShadow3d" value="0">
                   <div class="shadow-dir-dial-face" aria-hidden="true">
                     <div class="shadow-dir-dial-arm"></div>
                     <div class="shadow-dir-dial-knob"></div>
                   </div>
+                  <button
+                    type="button"
+                    class="shadow-dir-3d-btn"
+                    id="eventNameShadow3dBtn"
+                    aria-pressed="false"
+                    title="3D shadow from viewport center"
+                  >3D</button>
                 </div>
               </div>
               <div class="field sub-option disabled" id="eventNameScrollDirWrap">
@@ -3272,6 +3335,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       'down-right': document.getElementById('kbDirDownRight'),
     };
     const showEventName = document.getElementById('showEventName');
+    const disableDemoLocks = document.getElementById('disableDemoLocks');
+    const disableDemoLocksRow = document.getElementById('disableDemoLocksRow');
     const eventNameOptions = document.getElementById('eventNameOptions');
     const eventNameText = document.getElementById('eventNameText');
     const eventNameFont = document.getElementById('eventNameFont');
@@ -3302,6 +3367,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const eventNameShadowDirDial = document.getElementById('eventNameShadowDirDial');
     const eventNameShadowDirVal = document.getElementById('eventNameShadowDirVal');
     const eventNameShadowDirWrap = document.getElementById('eventNameShadowDirWrap');
+    const eventNameShadow3d = document.getElementById('eventNameShadow3d');
+    const eventNameShadow3dBtn = document.getElementById('eventNameShadow3dBtn');
+    let eventTitleShadow3dRaf = null;
+    let eventTitleShadow3dDistPx = 0;
+    let eventTitleShadow3dBlurPx = 0;
     const eventNameScroll = document.getElementById('eventNameScroll');
     const eventNameWrap = document.getElementById('eventNameWrap');
     const eventNameWrapLabel = document.getElementById('eventNameWrapLabel');
@@ -3604,7 +3674,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     const EVENT_NAME_SIZE_LEGACY = { small: 4, medium: 6, large: 12, xlarge: 20 };
 
     function getEventNameSizeMinVh() {
-      return isDemoEvent() ? 5 : 2;
+      return demoLocksActive() ? 5 : 2;
     }
 
     function getEventNameSizeVh() {
@@ -3700,6 +3770,11 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         showEventName.checked = parseQueryBool(eventNameRaw, showEventName.checked);
       }
 
+      const disableDemoRaw = params.get('disableDemoLocks') ?? params.get('demoLocksOff');
+      if (disableDemoRaw !== null && disableDemoLocks) {
+        disableDemoLocks.checked = parseQueryBool(disableDemoRaw, disableDemoLocks.checked);
+      }
+
       const textRaw = params.get('eventNameText') ?? params.get('bannerText');
       if (textRaw !== null) {
         eventNameText.value = String(textRaw).slice(0, 120);
@@ -3781,6 +3856,10 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           clampQueryNumber(shadowDirRaw, 0, 359, Number(eventNameShadowDir.value) || 90, 1),
           false,
         );
+      }
+      const shadow3dRaw = params.get('eventNameShadow3d') ?? params.get('bannerShadow3d');
+      if (shadow3dRaw !== null) {
+        setShadow3dMode(parseQueryBool(shadow3dRaw, false), false);
       }
 
       const scrollRaw = params.get('eventNameScroll') ?? params.get('bannerScroll');
@@ -3866,6 +3945,9 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       params.set('qrBrandImage', qrBrandImage.value);
       params.set('qrBrand', getQrBrandLabel());
       params.set('showEventName', showEventName.checked ? '1' : '0');
+      if (isDemoEvent() && disableDemoLocks) {
+        params.set('disableDemoLocks', disableDemoLocks.checked ? '1' : '0');
+      }
       params.set('eventNameText', eventNameText.value);
       params.set('eventNameFont', eventNameFont.value);
       params.set('eventNameSize', String(getEventNameSizeVh()));
@@ -3879,6 +3961,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       params.set('eventNameShadowDist', eventNameShadowDist.value);
       params.set('eventNameShadowBlur', eventNameShadowBlur.value);
       params.set('eventNameShadowDir', eventNameShadowDir.value);
+      params.set('eventNameShadow3d', isShadow3dMode() ? '1' : '0');
       params.set('eventNameScroll', eventNameScroll.checked ? '1' : '0');
       params.set('eventNameWrap', eventNameWrap.checked ? '1' : '0');
       params.set('eventNameScrollDir', eventNameScrollDir.value);
@@ -4299,8 +4382,12 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return slug === 'demo' || display === 'demo';
     }
 
+    function demoLocksActive() {
+      return isDemoEvent() && !(disableDemoLocks && disableDemoLocks.checked);
+    }
+
     function getBannerText() {
-      if (isDemoEvent()) return getEventDefaultName() || 'demo';
+      if (demoLocksActive()) return getEventDefaultName() || 'demo';
       return (eventNameText.value || '').trim();
     }
 
@@ -4439,21 +4526,24 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         clearInterval(demoContrastTimer);
         demoContrastTimer = null;
       }
-      if (!isDemoEvent() || !showEventName.checked) return;
+      if (!demoLocksActive() || !showEventName.checked) return;
       demoContrastTimer = setInterval(() => {
-        if (!isDemoEvent() || !showEventName.checked || eventTitleBanner.hidden) return;
+        if (!demoLocksActive() || !showEventName.checked || eventTitleBanner.hidden) return;
         const next = contrastSafeTextColor(eventNameColor.value || '#f8fafc');
         if (eventTitleBanner.style.color !== next) eventTitleBanner.style.color = next;
       }, 400);
     }
 
     function applyDemoTextLocks() {
-      const demo = isDemoEvent();
+      if (disableDemoLocksRow) {
+        disableDemoLocksRow.hidden = !isDemoEvent();
+      }
+      const locks = demoLocksActive();
       const minVh = getEventNameSizeMinVh();
       eventNameSize.min = String(minVh);
       if (Number(eventNameSize.value) < minVh) eventNameSize.value = String(minVh);
 
-      if (!demo) {
+      if (!locks) {
         showEventName.disabled = false;
         eventNameText.readOnly = false;
         eventNameText.removeAttribute('aria-readonly');
@@ -4546,6 +4636,38 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return normalizeDirDegrees(eventNameShadowDir.value, 90);
     }
 
+    function isShadow3dMode() {
+      return eventNameShadow3d && eventNameShadow3d.value === '1';
+    }
+
+    function applyShadowDirDialUi() {
+      const deg = getShadowDirDegrees();
+      eventNameShadowDir.value = String(deg);
+      eventNameShadowDirDial.style.setProperty('--dir-deg', deg + 'deg');
+      eventNameShadowDirDial.setAttribute('aria-valuenow', String(deg));
+      if (isShadow3dMode()) {
+        eventNameShadowDirDial.classList.add('shadow-3d-active');
+        eventNameShadowDirDial.setAttribute('aria-valuetext', '3D light at ' + deg + ' degrees');
+        eventNameShadowDirVal.textContent = '3D · ' + deg + '°';
+        if (eventNameShadow3dBtn) {
+          eventNameShadow3dBtn.setAttribute('aria-pressed', 'true');
+        }
+      } else {
+        eventNameShadowDirDial.classList.remove('shadow-3d-active');
+        eventNameShadowDirDial.setAttribute('aria-valuetext', deg + ' degrees');
+        eventNameShadowDirVal.textContent = deg + '°';
+        if (eventNameShadow3dBtn) {
+          eventNameShadow3dBtn.setAttribute('aria-pressed', 'false');
+        }
+      }
+    }
+
+    function setShadow3dMode(on, refreshBanner) {
+      if (eventNameShadow3d) eventNameShadow3d.value = on ? '1' : '0';
+      applyShadowDirDialUi();
+      if (refreshBanner !== false) updateEventTitleBanner();
+    }
+
     function setShadowDirDegrees(deg, refreshBanner) {
       applyDirDialUi(
         eventNameShadowDirDial,
@@ -4553,6 +4675,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         eventNameShadowDirVal,
         normalizeDirDegrees(deg, 90),
       );
+      applyShadowDirDialUi();
       if (refreshBanner !== false) updateEventTitleBanner();
     }
 
@@ -4649,10 +4772,118 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return root.querySelector('.event-title-text:not(.event-title-text-clone)');
     }
 
-    function syncBannerTextContent(name) {
-      eventTitleBanner.querySelectorAll('.event-title-text').forEach((el) => {
-        if (el.textContent !== name) el.textContent = name;
+    function titleTextPlain(el) {
+      if (!el) return '';
+      if (el.dataset.letterText != null) return el.dataset.letterText;
+      return el.textContent || '';
+    }
+
+    function setTitleTextContent(el, name, splitLetters) {
+      if (!el) return;
+      if (splitLetters) {
+        const hasLegacyLayers = !!(
+          el.querySelector('.event-title-shade-layer')
+          || el.querySelector('.event-title-face-layer')
+        );
+        if (
+          !hasLegacyLayers
+          && el.dataset.letterText === name
+          && el.querySelector('.event-title-letter')
+        ) {
+          return;
+        }
+        el.dataset.letterText = name;
+        el.textContent = '';
+        for (const ch of Array.from(name)) {
+          const span = document.createElement('span');
+          span.className = 'event-title-letter';
+          span.textContent = ch === ' ' ? '\u00A0' : ch;
+          el.appendChild(span);
+        }
+        return;
+      }
+      if (el.dataset.letterText != null) delete el.dataset.letterText;
+      el.querySelectorAll('.event-title-letter').forEach((letter) => {
+        letter.style.textShadow = '';
+        letter.style.zIndex = '';
       });
+      if (
+        el.textContent !== name
+        || el.querySelector('.event-title-letter')
+        || el.querySelector('.event-title-shade-layer')
+      ) {
+        el.textContent = name;
+      }
+    }
+
+    function syncBannerTextContent(name, splitLetters) {
+      eventTitleBanner.querySelectorAll('.event-title-text').forEach((el) => {
+        setTitleTextContent(el, name, splitLetters);
+      });
+    }
+
+    function stopShadow3dLoop() {
+      if (eventTitleShadow3dRaf) {
+        cancelAnimationFrame(eventTitleShadow3dRaf);
+        eventTitleShadow3dRaf = null;
+      }
+    }
+
+    function update3dLetterShadows(shadowDist, shadowBlur) {
+      const vw = Math.max(1, window.innerWidth);
+      const vh = Math.max(1, window.innerHeight);
+      // Ellipse touching all four viewport edges (defines light angle only).
+      const rx = vw / 2;
+      const ry = vh / 2;
+      const cx = rx;
+      const cy = ry;
+      const dirRad = (getShadowDirDegrees() * Math.PI) / 180;
+      // Place the light very far along the same ray as the dial point on the ellipse
+      // so shadows stay nearly parallel while keeping that angle.
+      const lightFar = 100;
+      const lightX = cx + Math.cos(dirRad) * rx * lightFar;
+      const lightY = cy + Math.sin(dirRad) * ry * lightFar;
+      const blur = Math.max(0, shadowBlur);
+      const maxShadow = Math.max(0, shadowDist);
+
+      eventTitleBanner.querySelectorAll('.event-title-letter').forEach((letter) => {
+        const rect = letter.getBoundingClientRect();
+        if ((rect.width <= 0 && rect.height <= 0) || eventTitleBanner.hidden) {
+          letter.style.textShadow = '';
+          letter.style.zIndex = '';
+          return;
+        }
+        const lx = rect.left + rect.width / 2;
+        const ly = rect.top + rect.height / 2;
+        // Shadow casts away from the light; distance slider only scales length.
+        const ox = lx - lightX;
+        const oy = ly - lightY;
+        const r = Math.hypot(ox, oy);
+        let sx = 0;
+        let sy = 0;
+        if (r > 0.5 && maxShadow > 0) {
+          sx = (ox / r) * maxShadow;
+          sy = (oy / r) * maxShadow;
+        }
+        letter.style.textShadow =
+          sx.toFixed(2) + 'px ' +
+          sy.toFixed(2) + 'px ' +
+          blur + 'px rgba(0, 0, 0, 0.8)';
+        letter.style.zIndex = String(Math.max(1, Math.round(r)));
+      });
+    }
+
+    function startShadow3dLoop() {
+      if (eventTitleShadow3dRaf) return;
+      const tick = () => {
+        if (!eventNameShadow.checked || !isShadow3dMode() || eventTitleBanner.hidden) {
+          eventTitleShadow3dRaf = null;
+          return;
+        }
+        update3dLetterShadows(eventTitleShadow3dDistPx, eventTitleShadow3dBlurPx);
+        eventTitleShadow3dRaf = requestAnimationFrame(tick);
+      };
+      eventTitleShadow3dRaf = requestAnimationFrame(tick);
     }
 
     function captureScrollTextPosPercent() {
@@ -4695,7 +4926,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       return { x: posX, y: posY };
     }
 
-    function ensureViewportWrapClones(track, primary, name, vw, vh) {
+    function ensureViewportWrapClones(track, primary, name, vw, vh, splitLetters) {
       const offsets = [];
       for (let i = -1; i <= 1; i += 1) {
         for (let j = -1; j <= 1; j += 1) {
@@ -4719,7 +4950,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       offsets.forEach(([i, j], idx) => {
         const clone = clones[idx];
         if (!clone) return;
-        if (clone.textContent !== name) clone.textContent = name;
+        setTitleTextContent(clone, name, !!splitLetters);
         clone.style.transform = 'translate(' + (i * vw) + 'px,' + (j * vh) + 'px)';
       });
     }
@@ -4741,7 +4972,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     function syncEventTitleScroll(track, scrollDx, scrollDy, pxPerSec, scrollDirDeg, wrap, opts) {
       const primary = getPrimaryTitleTextEl(track);
       if (!primary) return;
-      const name = primary.textContent || '';
+      const name = titleTextPlain(primary) || getBannerText() || '';
 
       void primary.offsetWidth;
       const tw = Math.max(1, primary.offsetWidth);
@@ -4777,7 +5008,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       track.style.animationDelay = '';
 
       if (wrap) {
-        ensureViewportWrapClones(track, primary, name, vw, vh);
+        ensureViewportWrapClones(
+          track,
+          primary,
+          name,
+          vw,
+          vh,
+          eventNameShadow.checked && isShadow3dMode(),
+        );
         let x = resetToAnchor ? 0 : preservedX;
         let y = resetToAnchor ? 0 : preservedY;
         const stable0 = stabilizeWrapOffset(x, y, vw, vh);
@@ -4858,6 +5096,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       eventNameShadowDistWrap.classList.toggle('disabled', shadowOptsDisabled);
       eventNameShadowBlurWrap.classList.toggle('disabled', shadowOptsDisabled);
       eventNameShadowDirWrap.classList.toggle('disabled', shadowOptsDisabled);
+      if (eventNameShadow3dBtn) eventNameShadow3dBtn.disabled = shadowOptsDisabled;
       const scrollOptsDisabled = !eventNameScroll.checked;
       eventNameScrollSpeedWrap.classList.toggle('disabled', scrollOptsDisabled);
       eventNameScrollDirWrap.classList.toggle('disabled', scrollOptsDisabled);
@@ -4876,7 +5115,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       eventNamePosXVal.textContent = posX + '%';
       eventNamePosYVal.textContent = posY + '%';
 
-      syncBannerTextContent(name);
+      const wantShadow3d = eventNameShadow.checked && isShadow3dMode();
+      syncBannerTextContent(name, wantShadow3d);
 
       const stack = EVENT_NAME_FONTS[eventNameFont.value] || EVENT_NAME_FONTS.system;
       const shadowStrength = Math.max(0, Number(eventNameShadowDist.value) || 0);
@@ -4888,8 +5128,8 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       const outlineWidth = Math.max(1, Math.round(outlineStrength * (sizeVh / 6)));
       const shadowDirDeg = getShadowDirDegrees();
       const shadowRad = (shadowDirDeg * Math.PI) / 180;
-      const shadowX = Math.round(Math.cos(shadowRad) * shadowDist);
-      const shadowY = Math.round(Math.sin(shadowRad) * shadowDist);
+      const shadowX = wantShadow3d ? 0 : Math.round(Math.cos(shadowRad) * shadowDist);
+      const shadowY = wantShadow3d ? 0 : Math.round(Math.sin(shadowRad) * shadowDist);
       const scrollDirDeg = getScrollDirDegrees();
       const scrollRad = (scrollDirDeg * Math.PI) / 180;
       const scrollDx = Math.cos(scrollRad);
@@ -4897,14 +5137,14 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       eventNameShadowDistVal.textContent = shadowDist + 'px';
       eventNameShadowBlurVal.textContent = shadowBlur + 'px';
       eventNameOutlineSizeVal.textContent = outlineWidth + 'px';
-      applyDirDialUi(eventNameShadowDirDial, eventNameShadowDir, eventNameShadowDirVal, shadowDirDeg);
+      applyShadowDirDialUi();
       applyDirDialUi(eventNameScrollDirDial, eventNameScrollDir, eventNameScrollDirVal, scrollDirDeg);
       syncScrollDirPresets(scrollDirDeg);
       eventTitleBanner.style.fontFamily = stack;
       eventTitleBanner.style.setProperty('--event-title-size', sizeVh + 'vh');
       eventTitleBanner.style.setProperty('--event-pos-x', String(posX));
       eventTitleBanner.style.setProperty('--event-pos-y', String(posY));
-      eventTitleBanner.style.color = isDemoEvent()
+      eventTitleBanner.style.color = demoLocksActive()
         ? contrastSafeTextColor(eventNameColor.value || '#f8fafc')
         : (eventNameColor.value || '#f8fafc');
       eventTitleBanner.style.setProperty('--event-shadow-x', shadowX + 'px');
@@ -4915,28 +5155,33 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
         '--event-outline-color',
         eventNameOutlineColor.value || '#000000',
       );
-      // Leave room so shadow/outline aren't clipped
+      // Leave room so shadow/outline aren't clipped. Use max distance extent so
+      // changing the distance slider only affects the shadow, not text position.
       const outlinePad = eventNameOutline.checked ? outlineWidth + 2 : 0;
-      const padX = Math.max(
-        14,
-        outlinePad + (eventNameShadow.checked ? Math.abs(shadowX) + shadowBlur + 4 : 0),
-      );
-      const padTop = Math.max(
-        14,
-        outlinePad + (eventNameShadow.checked ? Math.max(0, -shadowY) + shadowBlur + 4 : 0),
-      );
-      const padBottom = Math.max(
-        14,
-        outlinePad + (eventNameShadow.checked ? Math.max(0, shadowY) + shadowBlur + 4 : 0),
-      );
+      const maxShadowDistPx = Math.round(24 * (sizeVh / 6));
+      const shadowPad = eventNameShadow.checked
+        ? maxShadowDistPx + shadowBlur + 4
+        : 0;
+      const padX = Math.max(14, outlinePad + shadowPad);
+      const padTop = Math.max(14, outlinePad + shadowPad);
+      const padBottom = Math.max(14, outlinePad + shadowPad);
       eventTitleBanner.style.paddingTop = eventNameScroll.checked ? '0px' : padTop + 'px';
       eventTitleBanner.style.paddingBottom = eventNameScroll.checked ? '0px' : padBottom + 'px';
       eventTitleBanner.style.paddingLeft = eventNameScroll.checked ? '0px' : padX + 'px';
       eventTitleBanner.style.paddingRight = eventNameScroll.checked ? '0px' : padX + 'px';
       eventTitleBanner.classList.toggle('shadow', eventNameShadow.checked);
+      eventTitleBanner.classList.toggle('shadow-3d', wantShadow3d);
       eventTitleBanner.classList.toggle('outline', eventNameOutline.checked);
       eventTitleBanner.classList.toggle('scroll', eventNameScroll.checked);
       eventTitleBanner.classList.toggle('wrap', eventNameScroll.checked && eventNameWrap.checked);
+
+      eventTitleShadow3dDistPx = shadowDist;
+      eventTitleShadow3dBlurPx = shadowBlur;
+      if (wantShadow3d) {
+        startShadow3dLoop();
+      } else {
+        stopShadow3dLoop();
+      }
 
       const track = eventTitleBanner.querySelector('.event-title-track');
       if (track) {
@@ -4946,7 +5191,7 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
           const speed = Math.max(1, Number(eventNameScrollSpeed.value) || 5);
           // Gentle at 1, brisk at 5, very fast at 10
           const pxPerSec = 50 * Math.pow(1.7, speed - 1);
-          const layoutKey = name + '|' + sizeVh + '|' + window.innerWidth + '|' + window.innerHeight + '|' + (wantWrap ? 'w' : 'n');
+          const layoutKey = name + '|' + sizeVh + '|' + window.innerWidth + '|' + window.innerHeight + '|' + (wantWrap ? 'w' : 'n') + '|' + (wantShadow3d ? '3d' : '2d');
           const dirChanged = eventTitleScrollDirDeg === null
             || eventTitleScrollDirDeg !== scrollDirDeg;
           const justEnabled = !eventTitleScrollActive
@@ -5706,18 +5951,24 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
       });
     });
     showEventName.addEventListener('change', () => {
-      if (isDemoEvent()) showEventName.checked = true;
+      if (demoLocksActive()) showEventName.checked = true;
       scheduleMenuHide();
       updateEventTitleBanner();
     });
     eventNameText.addEventListener('input', () => {
-      if (isDemoEvent()) {
+      if (demoLocksActive()) {
         eventNameText.value = getEventDefaultName() || 'demo';
         return;
       }
       scheduleMenuHide();
       updateEventTitleBanner();
     });
+    if (disableDemoLocks) {
+      disableDemoLocks.addEventListener('change', () => {
+        scheduleMenuHide();
+        updateEventTitleBanner();
+      });
+    }
     eventNameFontBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       scheduleMenuHide();
@@ -5739,6 +5990,19 @@ const SLIDESHOW_HTML = `<!DOCTYPE html>
     eventNameShadow.addEventListener('change', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameShadowDist.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
     eventNameShadowBlur.addEventListener('input', () => { scheduleMenuHide(); updateEventTitleBanner(); });
+    if (eventNameShadow3dBtn) {
+      eventNameShadow3dBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      eventNameShadow3dBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (eventNameShadowDirWrap.classList.contains('disabled')) return;
+        setShadow3dMode(!isShadow3dMode());
+        scheduleMenuHide();
+      });
+    }
     wireDirDial(
       eventNameShadowDirDial,
       eventNameShadowDirWrap,
