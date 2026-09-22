@@ -121,7 +121,6 @@ Open `/slideshow` with optional settings in the URL. Omitted params keep the pag
 | `eventNameShadowDist` | `bannerShadowDist` | `0`–`24` (relative; scales with text size) | `4` |
 | `eventNameShadowBlur` | `bannerShadowBlur` | `0`–`24` (relative; scales with text size) | `2` |
 | `eventNameShadowDir` | `bannerShadowDir` | `0`–`359` (degrees; `0` right, `90` down) | `90` |
-| `eventNameShadow3d` | `bannerShadow3d` | `1`/`0`, `true`/`false` (per-letter shadow from a virtual light on the ellipse that touches all four viewport edges; dial sets angle on that ellipse, distance scales shadow length only) | `false` |
 | `eventNameScroll` | `bannerScroll` | `1`/`0`, `true`/`false` | `false` |
 | `eventNameWrap` | `bannerWrap` | `1`/`0`, `true`/`false` (viewport edge wrap while scrolling) | `true` |
 | `eventNameScrollDir` | `bannerScrollDir` | `0`–`359` (degrees; travel direction; `180` left) | `180` |
